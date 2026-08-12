@@ -12,7 +12,7 @@ Produce an implementation-ready specification for `@akshatmittal/invoker`: an or
 - A Task's setup maps to `beforeAll`; its typed result is shared by every Case for that Task.
 - Concurrency, timeouts, retries, workers, and other generic execution settings belong directly to Vitest configuration; Invoker does not proxy them.
 - Task output is JSON stored with matrix coordinates and caller metadata under `task.meta.invoker`.
-- Vitest's JSON reporter produces the artifact; its GitHub Actions reporter produces annotations and a job summary. Workflow configuration owns artifact upload and retention.
+- Vitest's JSON reporter produces the artifact; its GitHub Actions reporter produces annotations and a job summary. Invoker's optional Slack reporter posts Workflow summaries and threaded failure details. Workflow configuration owns artifact upload and retention.
 
 ## Decisions so far
 
@@ -23,7 +23,7 @@ Produce an implementation-ready specification for `@akshatmittal/invoker`: an or
 - [Define Invoker's result metadata schema](issues/03-define-run-result-schema.md) — add only a versioned matrix/metadata/output envelope to Vitest results while preserving exact Task types through the JSON boundary.
 - [Define scheduling and Task lifecycle semantics](issues/04-define-scheduling-and-lifecycle.md) — register sequential Task suites and concurrent Cases with static metadata; map typed setup/teardown to Vitest hooks and leave runner settings to Vitest.
 - [Define failure and output semantics](issues/05-define-failure-and-exit-semantics.md) — surface setup, Task, validation, and teardown failures through Vitest; retain static coordinates, clear retried Output, and avoid a parallel status model.
-- [Define Vitest reporter configuration](issues/06-define-runner-reporter-contract.md) — use Vitest's default, JSON, and conditional GitHub reporters directly; retain one artifact-ready report and add no Invoker reporter.
+- [Define Vitest reporter configuration](issues/06-define-runner-reporter-contract.md) — use Vitest's default, JSON, and conditional GitHub reporters directly; retain one artifact-ready report, with a later optional Slack reporter extension.
 - [Define the public TypeScript API](issues/08-define-public-typescript-api.md) — expose only strictly inferred `defineTask` definitions and side-effecting `defineWorkflow` registration; leave all generic execution options to Vitest.
 - [Define package placement and exports](issues/09-define-package-and-export-layout.md) — publish one ESM `packages/invoker` entry with Vitest as a peer, strip the web template, and retain pnpm, Changesets, Turbo, and tsdown.
 - [Assemble the implementation-ready Invoker specification](issues/12-assemble-implementation-ready-spec.md) — consolidate the resolved map into the canonical [`spec.md`](spec.md) handoff with no remaining decision frontier.
@@ -37,5 +37,5 @@ None.
 - Parallel Tasks and per-Task concurrency limits.
 - A custom runner, collector, worker pool, scheduler, CLI, or directory discovery.
 - [Define result persistence and reading responsibilities](issues/07-define-result-persistence-and-reading.md) — ruled beyond v1 because Vitest writes the result file and CI or downstream consumers own retention and querying.
-- Invoker-owned reporters beyond metadata consumed by Vitest's built-in JSON and GitHub Actions reporters.
+- General reporter framework or Invoker-owned result format beyond the focused Slack reporter and metadata consumed by Vitest's built-in JSON and GitHub Actions reporters.
 - A website or app.

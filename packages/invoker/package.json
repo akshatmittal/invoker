@@ -27,6 +27,10 @@
     ".": {
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
+    },
+    "./slack": {
+      "types": "./dist/slack.d.mts",
+      "import": "./dist/slack.mjs"
     }
   },
   "publishConfig": {
@@ -36,6 +40,9 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@slack/web-api": "^8.0.0"
   },
   "devDependencies": {
     "@types/node": "catalog:",
