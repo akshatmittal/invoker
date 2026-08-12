@@ -1,0 +1,9 @@
+{
+  "extends": "@workspace/tsconfig/config.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

@@ -1,0 +1,14 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./apps/web-start"
+    },
+    {
+      "path": "./packages/app-config"
+    },
+    {
+      "path": "./packages/ui"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "extends": "@workspace/tsconfig/config.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/test/*": ["./test/*"]
+    }
+  },
+  "include": ["test/**/*.ts", "src/**/*.ts"],
+  "exclude": ["dist", "build", "node_modules"]
+}
