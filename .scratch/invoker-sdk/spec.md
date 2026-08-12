@@ -362,7 +362,7 @@ Implementation changes:
 - One `"."` export with compiled ESM and declarations.
 - Publish only `dist`, `README.md`, and license material.
 - Reuse tsdown for one `src/index.ts` entry, ESM output, and declarations.
-- Require `vitest: ^4.1.7` as a peer dependency and a development dependency.
+- Require `vitest: ^4.1.10` as a peer dependency and a development dependency.
 - Reference Vitest directly rather than adding it to the workspace catalog.
 - Import runtime/types only from documented public `vitest` entry points; never depend directly on internal Vitest packages.
 

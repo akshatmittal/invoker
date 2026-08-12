@@ -10,7 +10,7 @@ validated JSON Output in Vitest metadata for reporters and later analysis.
 pnpm add -D @akshatmittal/invoker vitest
 ```
 
-Invoker supports Node 24 and Vitest 4.1.7 or newer within Vitest 4.
+Invoker supports Node 24 and Vitest 4.1.10 or newer within Vitest 4.
 
 ## Define a Workflow
 

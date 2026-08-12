@@ -12,6 +12,6 @@
     "@types/node": "catalog:",
     "@workspace/tsconfig": "workspace:*",
     "typescript": "catalog:",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.10"
   }
 }
