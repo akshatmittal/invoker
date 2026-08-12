@@ -3,11 +3,12 @@
   "tasks": {
     "build": {
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
+      "outputs": ["dist/**"],
       "dependsOn": ["^build"]
     },
     "typecheck": {
-      "cache": false
+      "cache": false,
+      "dependsOn": ["^build"]
     },
     "dev": {
       "cache": false,

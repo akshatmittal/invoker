@@ -1,0 +1,53 @@
+{
+  "name": "@akshatmittal/invoker",
+  "version": "0.1.0",
+  "description": "Typed matrix-driven regression workflows for Vitest.",
+  "keywords": [
+    "matrix",
+    "regression",
+    "vitest",
+    "workflow"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/akshatmittal/invoker.git"
+  },
+  "files": [
+    "dist/**",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@workspace/tsconfig": "workspace:*",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "^4.1.7"
+  },
+  "peerDependencies": {
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": "^24.18.1"
+  }
+}

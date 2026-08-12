@@ -1,0 +1,17 @@
+{
+  "name": "@workspace/invoker-example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@akshatmittal/invoker": "workspace:*",
+    "@types/node": "catalog:",
+    "@workspace/tsconfig": "workspace:*",
+    "typescript": "catalog:",
+    "vitest": "^4.1.7"
+  }
+}

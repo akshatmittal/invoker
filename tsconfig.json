@@ -2,13 +2,10 @@
   "files": [],
   "references": [
     {
-      "path": "./apps/web-start"
+      "path": "./apps/example"
     },
     {
-      "path": "./packages/app-config"
-    },
-    {
-      "path": "./packages/ui"
+      "path": "./packages/invoker"
     }
   ]
 }

@@ -1,13 +1,10 @@
 {
   "folders": [
     {
-      "path": "apps/web-start",
+      "path": "apps/example",
     },
     {
-      "path": "packages/app-config",
-    },
-    {
-      "path": "packages/ui",
+      "path": "packages/invoker",
     },
     {
       "name": "workspace-root",
@@ -15,7 +12,6 @@
     },
   ],
   "settings": {
-    "cSpell.words": ["efferd"],
     "js/ts.tsdk.path": "workspace-root/node_modules/typescript/lib",
     "editor.defaultFormatter": "oxc.oxc-vscode",
   },
