@@ -222,15 +222,15 @@ A matrixless Case is named `[1]`.
 
 1. Validate the Workflow name and metadata.
 2. Validate every Task definition, enforce unique Task names, expand every matrix, and construct every Case name and static metadata. Do not partially register an invalid Workflow.
-3. Register `describe(workflow.name, ...)`.
-4. In Task tuple order, register one ordinary `describe(task.name, ...)` per Task.
-5. Inside each Task suite, keep a shared setup value plus a boolean indicating successful setup.
-6. When setup exists, register `beforeAll` to call it once with all expanded Cases, await it, retain its exact value by reference, and mark setup successful.
+3. Register `describe(workflow.name, { concurrent: false }, ...)`.
+4. In Task tuple order, register one `describe(task.name, { concurrent: false }, ...)` per Task.
+5. Inside each Task suite, keep a shared setup value.
+6. When setup exists, register `beforeAll` to call it once with all expanded Cases, await it, and retain its exact value by reference.
 7. Register every expanded Case individually with `test.concurrent(caseName, { meta }, callback)`. Do not use `test.concurrent.for`, because each Case needs distinct static metadata before setup or execution.
 8. At the start of every Case attempt, remove any prior `meta.invoker.output`.
 9. Call `run` with its coordinate, shared setup value or `undefined`, and the current `TestContext`.
 10. Validate the returned Output as JSON, then assign it to `vitest.task.meta.invoker.output`.
-11. When teardown exists, register `afterAll`; call it only when setup completed successfully, pass the same setup reference and Cases, and await it.
+11. When teardown exists, return it as the `beforeAll` cleanup; Vitest calls it only after setup completed successfully with the same setup reference and Cases.
 
 Invoker attaches this static metadata during collection:
 
@@ -276,7 +276,7 @@ Vitest owns all execution status:
 - A setup exception is a native `beforeAll` failure. Case callbacks do not run, but collected Cases retain static matrix and Workflow metadata.
 - A Task exception or assertion is a native failed test. Output is absent unless the callback returned successfully.
 - Invalid Output makes the wrapper throw, producing a native failed test.
-- A teardown exception is a native `afterAll` failure. Completed Case statuses and Outputs remain intact; Invoker synthesizes no Case failures.
+- A teardown exception is a native one-time cleanup failure. Completed Case statuses and Outputs remain intact; Invoker synthesizes no Case failures.
 - User teardown runs only after successful setup. Setup code that partially allocates before throwing must clean up its own partial work.
 - Skips, todos, filters, retries, cancellation, interruption, suite status, run reason, error serialization, and process exit remain Vitest-owned.
 - At every retry attempt, clear prior Output and set it only after successful return and validation. Final metadata cannot retain stale Output from an earlier attempt.
@@ -324,9 +324,21 @@ Target workspace:
 ```text
 /
   .changeset/config.json
+  apps/
+    example/
+      src/
+      package.json
+      tsconfig.json
+      vitest.config.ts
   packages/
     invoker/
-      src/index.ts
+      src/
+        index.ts
+        json.ts
+        matrix.ts
+        task.ts
+        types.ts
+        workflow.ts
       package.json
       tsconfig.json
       tsdown.config.ts
@@ -344,7 +356,7 @@ Implementation changes:
 
 - Replace `packages/app-config` with `packages/invoker`.
 - Delete `apps/web-start` and `packages/ui` completely.
-- Remove `apps/*` from `pnpm-workspace.yaml`.
+- Keep only the non-web `apps/example` consumer in `apps/*`.
 - Remove every web-only dependency, catalog entry, override, shared DOM/JSX compiler option, root TypeScript reference, build output, and lockfile entry.
 - Keep pnpm, Changesets, Turbo, tsdown, TypeScript, linting, formatting, and release management.
 - Rename the private root package to `invoker-workspace`.
@@ -366,7 +378,7 @@ Implementation changes:
 - Reference Vitest directly rather than adding it to the workspace catalog.
 - Import runtime/types only from documented public `vitest` entry points; never depend directly on internal Vitest packages.
 
-Start with one implementation source file. Split only when its actual size impairs navigation; do not pre-create layers or plugin abstractions.
+Keep `index.ts` as the public package interface. Internal modules own one cohesive concern each: public data contracts, Task definition, JSON validation, matrix expansion, and Workflow registration. Do not add pass-through layers or plugin abstractions.
 
 ## Out of scope for v1
 
@@ -385,7 +397,7 @@ Add any of these only when a concrete regression suite demonstrates that Vitest'
 
 1. Remove the web template and simplify workspace/package/TypeScript configuration.
 2. Create the publishable `packages/invoker` shell by adapting the existing tsdown package configuration.
-3. Define the public JSON, Matrix, Task, context, metadata, and Workflow types in `src/index.ts`.
+3. Define the public JSON, Matrix, context, and metadata types in `src/types.ts`, and the Task contract in `src/task.ts`.
 4. Implement JSON validation and canonical coordinate comparison with JavaScript/Node primitives.
 5. Implement deterministic matrix expansion and Case display names.
 6. Implement `defineTask` inference and readonly definition output.
