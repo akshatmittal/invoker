@@ -57,6 +57,7 @@ defineWorkflow({
 
 Matrix literals determine the exact `matrix` type, `setup` determines the exact
 shared setup type, and the exact JSON return type is retained on the Task.
+Axis names must be non-empty, enumerable strings that are not array indexes.
 Omitting `matrix` creates one Case with `{}`. Setup runs once per Task, Cases
 within that Task run concurrently, and teardown runs once after successful
 setup. Tasks run sequentially in their Workflow.

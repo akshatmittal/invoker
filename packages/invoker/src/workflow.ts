@@ -66,7 +66,7 @@ export function defineWorkflow<
               vitest,
             });
             assertJson(output, `Task ${JSON.stringify(prepared.task.name)}`, ".output");
-            meta.invoker.output = output;
+            meta.invoker.output = structuredClone(output);
           });
         }
       });

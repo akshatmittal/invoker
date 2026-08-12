@@ -188,7 +188,8 @@ matrix: {
 Rules:
 
 - An omitted matrix or `{}` expands to one Case with coordinate `{}`.
-- Each axis name is non-empty and each value is a non-empty readonly array of JSON values.
+- Each axis name is a non-empty, enumerable string that is not an array index, and each value is a non-empty
+  readonly array of JSON values.
 - Structured JSON objects may be axis values, allowing correlated parameters on one axis.
 - There is no explicit-Case mode and no `include`, `exclude`, asynchronous discovery, custom naming callback, or Case-count ceiling.
 - Expansion is the Cartesian product.
@@ -229,7 +230,7 @@ A matrixless Case is named `[1]`.
 7. Register every expanded Case individually with `test.concurrent(caseName, { meta }, callback)`. Do not use `test.concurrent.for`, because each Case needs distinct static metadata before setup or execution.
 8. At the start of every Case attempt, remove any prior `meta.invoker.output`.
 9. Call `run` with its coordinate, shared setup value or `undefined`, and the current `TestContext`.
-10. Validate the returned Output as JSON, then assign it to `vitest.task.meta.invoker.output`.
+10. Validate the returned Output as JSON, then assign a structured clone to `vitest.task.meta.invoker.output`.
 11. When teardown exists, return it as the `beforeAll` cleanup; Vitest calls it only after setup completed successfully with the same setup reference and Cases.
 
 Invoker attaches this static metadata during collection:
@@ -263,7 +264,8 @@ Reject with the owning Workflow or Task and exact property path:
 - Sparse array holes.
 - Cyclic values.
 - `Date`, class instances, maps, sets, typed arrays, and other non-plain objects.
-- Non-array matrix axes, empty axis arrays, empty/whitespace-only names, and duplicate coordinates.
+- Non-enumerable, symbol, or array-index matrix axes; non-array axes; empty axis arrays; empty/whitespace-only
+  names; and duplicate coordinates.
 
 Matrix and Task validation occurs before that Task is registered; Workflow metadata and the full Task list are validated before the Workflow suite is registered. Output validation occurs after `run` resolves and fails that Case through an ordinary thrown validation error.
 
@@ -279,7 +281,8 @@ Vitest owns all execution status:
 - A teardown exception is a native one-time cleanup failure. Completed Case statuses and Outputs remain intact; Invoker synthesizes no Case failures.
 - User teardown runs only after successful setup. Setup code that partially allocates before throwing must clean up its own partial work.
 - Skips, todos, filters, retries, cancellation, interruption, suite status, run reason, error serialization, and process exit remain Vitest-owned.
-- At every retry attempt, clear prior Output and set it only after successful return and validation. Final metadata cannot retain stale Output from an earlier attempt.
+- At every retry attempt, clear prior Output and set a snapshot only after successful return and validation. Final
+  metadata cannot retain stale Output from an earlier attempt or later mutation.
 - Collected but unexecuted Cases retain static Invoker metadata and have no Output.
 - Do not repair partial metadata after cancellation or process interruption.
 

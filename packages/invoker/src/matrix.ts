@@ -10,10 +10,19 @@ export function expandMatrix(matrix: unknown, owner: string): readonly JsonObjec
   assertPlainObject(matrix, owner, ".matrix");
   let cases: JsonObject[] = [{}];
 
-  for (const [axis, values] of Object.entries(matrix)) {
+  for (const axis of Reflect.ownKeys(matrix)) {
+    if (typeof axis !== "string" || !Object.prototype.propertyIsEnumerable.call(matrix, axis)) {
+      fail(owner, ".matrix", "axis names must be enumerable strings");
+    }
     if (axis.trim() === "") {
       fail(owner, ".matrix", "axis names must not be empty");
     }
+    const index = Number(axis);
+    if (Number.isInteger(index) && index >= 0 && index < 2 ** 32 - 1 && String(index) === axis) {
+      fail(owner, `.matrix.${axis}`, "array-index axis names cannot preserve insertion order");
+    }
+
+    const values = matrix[axis];
     if (!Array.isArray(values)) {
       fail(owner, `.matrix.${axis}`, "expected an array");
     }
