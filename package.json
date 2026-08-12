@@ -25,14 +25,14 @@
     "@changesets/changelog-github": "^0.7.0",
     "@changesets/cli": "^2.31.1",
     "@changesets/config": "^3.1.4",
-    "oxfmt": "^0.61.0",
-    "oxlint": "^1.76.0",
-    "taze": "^19.16.0",
-    "turbo": "^2.10.8",
+    "oxfmt": "^0.63.0",
+    "oxlint": "^1.78.0",
+    "taze": "^20.0.1",
+    "turbo": "^2.10.9",
     "typescript": "catalog:"
   },
   "engines": {
     "node": "^24.18.1"
   },
-  "packageManager": "pnpm@11.18.0"
+  "packageManager": "pnpm@11.21.0"
 }

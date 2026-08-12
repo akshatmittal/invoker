@@ -11,9 +11,9 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "catalog:",
-    "@tanstack/react-router": "^1.170.18",
-    "@tanstack/react-start": "^1.168.34",
-    "@tanstack/router-plugin": "^1.168.23",
+    "@tanstack/react-router": "^1.170.25",
+    "@tanstack/react-start": "^1.168.42",
+    "@tanstack/router-plugin": "^1.168.29",
     "@workspace/ui": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"
@@ -25,6 +25,6 @@
     "@vitejs/plugin-react": "^6.0.5",
     "@workspace/tsconfig": "workspace:*",
     "typescript": "catalog:",
-    "vite": "^8.2.0"
+    "vite": "^8.2.1"
   }
 }
