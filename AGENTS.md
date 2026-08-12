@@ -5,6 +5,7 @@
 # TypeScript & Package
 
 - Do not add new packages to catalog unless explicitly asked.
+- Always add a Changeset once you've made a change.
 
 ## Agent skills
 
