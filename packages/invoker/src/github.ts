@@ -183,14 +183,14 @@ export async function defineGitHubSchedule(definition: GitHubScheduleDefinition)
           }
 
           const scheduledAt = (currentJob.currentRun() ?? new Date()).toISOString();
-          const dispatch = github
-            .dispatch(schedule)
-            .then((result) => logDispatch(schedule, scheduledAt, result))
-            .catch((error: unknown) => {
+          const dispatch = github.dispatch(schedule).then(
+            (result) => logDispatch(schedule, scheduledAt, result),
+            (error: unknown) => {
               const failure = githubFailure(error, "dispatch workflow", schedule);
               logDispatch(schedule, scheduledAt, undefined, failure);
               throw new Error(failure.message);
-            });
+            },
+          );
 
           inFlight.add(dispatch);
           dispatch.then(
