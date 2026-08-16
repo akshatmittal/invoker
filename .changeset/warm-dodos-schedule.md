@@ -1,5 +1,5 @@
 ---
-"@akshatmittal/invoker": patch
+"@akshatmittal/invoker": minor
 ---
 
-Document the GitHub Schedule domain language.
+Add the independent GitHub App-powered workflow scheduler at `@akshatmittal/invoker/github`.
