@@ -27,3 +27,15 @@ _Avoid_: Parameter set, variants
 **Output**:
 The JSON value produced by a successfully completed Case for later reporting and analysis.
 _Avoid_: Return value, result metadata
+
+**GitHub Actions Workflow**:
+An automation definition hosted and executed by GitHub Actions.
+_Avoid_: Workflow when it could be confused with an Invoker Workflow
+
+**GitHub Schedule**:
+A recurring plan that Dispatches a GitHub Actions Workflow at configured times.
+_Avoid_: Cron job, scheduled Workflow
+
+**Dispatch**:
+One request to GitHub to start a GitHub Actions Workflow for a repository and git reference with optional inputs.
+_Avoid_: Invocation, trigger
