@@ -45,9 +45,7 @@ type GitHubScheduleDefinition = {
   readonly schedules: readonly [GitHubSchedule, ...GitHubSchedule[]];
 };
 
-export function defineGitHubSchedule(
-  definition: GitHubScheduleDefinition,
-): Promise<void>;
+export function defineGitHubSchedule(definition: GitHubScheduleDefinition): Promise<void>;
 ```
 
 Only `defineGitHubSchedule` is exported. Its supporting aliases remain declaration-private. There is no public class, generic, handle, logger, client, callback, installation ID, adapter, signal, or lifecycle API.

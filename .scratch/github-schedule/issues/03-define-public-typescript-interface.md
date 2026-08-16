@@ -32,9 +32,7 @@ type GitHubScheduleDefinition = {
   readonly schedules: readonly [GitHubSchedule, ...GitHubSchedule[]];
 };
 
-export function defineGitHubSchedule(
-  definition: GitHubScheduleDefinition,
-): Promise<void>;
+export function defineGitHubSchedule(definition: GitHubScheduleDefinition): Promise<void>;
 ```
 
 The App ID is a positive safe integer; callers using `t3-env` coerce their environment string before calling. `repository` remains a plain string and is runtime-validated as exactly `owner/name`. `workflow` accepts either a non-empty filename or positive numeric GitHub Actions Workflow ID. `ref` is always explicit. `timezone` is the only default and becomes `UTC` when omitted.
