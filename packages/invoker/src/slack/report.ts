@@ -323,7 +323,7 @@ function deduplicateFailures(failures: Failure[]): Failure[] {
 }
 
 function escapeSlack(value: string): string {
-  return escapeSlackControl(value).replaceAll(/([\\`*_~])/g, "\\$1");
+  return escapeSlackControl(value).replaceAll("*", "∗").replaceAll("_", "＿").replaceAll("~", "∼").replaceAll("`", "ˋ");
 }
 
 function escapeSlackControl(value: string): string {
