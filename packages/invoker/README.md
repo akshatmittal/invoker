@@ -67,10 +67,11 @@ and active workflow is validated before timers begin; GitHub validates the ref,
 `workflow_dispatch` declaration, and input schema when a Dispatch is due.
 
 Run exactly one replica. Dispatches may overlap, are not persisted or retried,
-and failures do not stop later occurrences. The process emits scheduler-scoped
-evlog events without changing global logger configuration. `SIGINT` and
-`SIGTERM` stop new Dispatches, await in-flight requests, and resolve the
-long-running promise.
+and failures do not stop later occurrences. The process emits events through
+evlog's shared logger, so the host's filtering, sampling, redaction, and drain
+configuration applies. The module does not initialize or configure evlog.
+`SIGINT` and `SIGTERM` stop new Dispatches, await in-flight requests, and
+resolve the long-running promise.
 
 ### Docker
 

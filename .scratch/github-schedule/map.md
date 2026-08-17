@@ -14,7 +14,7 @@ Produce an implementation-ready specification for an independent `@akshatmittal/
 - The runtime is a single-process, best-effort scheduler: one replica, no persistence, catch-up, distributed locks, or cross-process duplicate prevention.
 - Dispatch due GitHub Schedules concurrently. A failed Dispatch is logged and not retried; later occurrences continue.
 - `defineGitHubSchedule()` validates all configuration and GitHub targets before starting timers, handles `SIGINT` and `SIGTERM`, awaits in-flight Dispatches, and then resolves.
-- Use scheduler-scoped evlog operations without initializing or changing process-global logger configuration. Never log credentials, access tokens, or GitHub Actions Workflow inputs.
+- Use evlog's shared logger without initializing or changing its process-global configuration; host filtering, sampling, redaction, and drains apply. Never log credentials, access tokens, or GitHub Actions Workflow inputs.
 - Dispatch only: log GitHub's returned Run URL, but do not monitor Runs or own their concurrency, retries, results, or artifacts.
 - Support GitHub.com only.
 - Deliver a library and documented Docker example, not a CLI, hosted app, or published image.

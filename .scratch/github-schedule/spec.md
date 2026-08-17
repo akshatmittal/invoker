@@ -140,7 +140,7 @@ Removing the handlers lets a second signal use Node's default immediate terminat
 
 ## Observability and error safety
 
-Use scheduler-owned `evlog.createLogger()` operations. Never call `evlog.initLogger()` or change process-global logging configuration.
+Use evlog's shared `log` emitter. Never call `evlog.initLogger()` or change process-global logging configuration. The host's current `enabled`, `minLevel`, sampling, silent, redaction, and drain settings apply to scheduler events.
 
 Emit exactly three wide-event families, once per operation:
 
@@ -197,7 +197,7 @@ Add these direct package dependencies with package-local semver ranges, not work
 - `@octokit/auth-app` for GitHub App and installation authentication;
 - `@octokit/request` for the narrow REST client;
 - `croner` for scheduling;
-- `evlog` for operation-scoped structured logging.
+- `evlog` for shared structured logging.
 
 Import every declared runtime dependency directly. `@t3-oss/env-core`, Zod, Docker, and the host application are consumer concerns and do not belong to the package dependency graph. Because both exports share one npm package, root-only users also download the GitHub dependencies; splitting the install graph requires a separate npm package and is outside this specification.
 

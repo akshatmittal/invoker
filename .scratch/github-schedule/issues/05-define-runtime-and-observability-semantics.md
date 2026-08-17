@@ -6,7 +6,7 @@ Blocked by: 01, 02
 
 ## Question
 
-What are the exact startup ordering, cron and timezone semantics, concurrent Dispatch behavior, post-start failure policy, process-signal handling, shutdown ordering, and scheduler-scoped evlog wide-event fields for `defineGitHubSchedule()`?
+What are the exact startup ordering, cron and timezone semantics, concurrent Dispatch behavior, post-start failure policy, process-signal handling, shutdown ordering, and evlog event fields for `defineGitHubSchedule()`?
 
 ## Answer
 
@@ -20,7 +20,7 @@ Each due callback immediately starts its Dispatch and returns its tracked promis
 
 The first `SIGINT` or `SIGTERM` marks the scheduler as stopping, stops every Croner job, removes the module's signal handlers, and awaits all in-flight Dispatch promises with settled semantics. Removing the handlers lets a second signal invoke Node's default immediate termination. Graceful shutdown has no internal timeout. After the in-flight set drains, release the active-scheduler slot, emit shutdown, and resolve `Promise<void>`.
 
-Use scheduler-owned `evlog.createLogger()` operations without calling process-global `initLogger()`. Emit exactly three wide-event families, once per operation:
+Use evlog's shared `log` emitter without calling process-global `initLogger()` or changing its configuration. The host's current filtering, sampling, silent, redaction, and drain settings apply. Emit exactly three event families, once per operation:
 
 - `github_schedule.startup`: schedule, repository, and GitHub Actions Workflow counts plus success or sanitized failure.
 - `github_schedule.dispatch`: configured repository, Workflow identifier, ref, cron, normalized timezone, scheduled time, and either validated Run ID/web URL or sanitized failure.
