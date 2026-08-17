@@ -7,9 +7,18 @@ export const GITHUB_SCHEDULE_OWNER = "GitHub Schedule";
 
 const inputSchema = z.union([z.string(), z.number().finite(), z.boolean()]);
 
+const timezoneSchema = z.string().refine((timezone) => {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}, "expected a valid IANA timezone");
+
 const scheduleSchema = z.strictObject({
   cron: z.string().min(1),
-  timezone: z.string().min(1).default("UTC"),
+  timezone: timezoneSchema.default("UTC"),
   repository: z.string().regex(/^[^/\s]+\/[^/\s]+$/),
   workflow: z.union([
     z.int().positive(),
