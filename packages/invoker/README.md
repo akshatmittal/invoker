@@ -125,9 +125,9 @@ export const evaluateModels = defineTask({
 ```
 
 ```ts
-// regressions/model/index.test.ts
+// regressions/workflows/model-regressions.test.ts
 import { defineWorkflow } from "@akshatmittal/invoker";
-import { evaluateModels } from "./tasks/evaluate-models.js";
+import { evaluateModels } from "../tasks/evaluate-models.js";
 
 defineWorkflow({
   name: "model-regressions",
@@ -148,8 +148,8 @@ setup. Tasks run sequentially in their Workflow.
 
 ## Configure Vitest
 
-Invoker uses Vitest's built-in reporters. The JSON reporter includes each
-Case's data at `assertionResults[].meta.invoker`:
+The JSON reporter includes each Case's data at
+`assertionResults[].meta.invoker`:
 
 ```ts
 // vitest.config.ts
@@ -170,8 +170,12 @@ Run every Workflow or filter to one Task with ordinary Vitest commands:
 
 ```sh
 pnpm vitest run
-pnpm vitest run regressions/model/index.test.ts -t evaluate-models
+pnpm vitest run regressions/workflows/model-regressions.test.ts -t evaluate-models
 ```
+
+Define additional Workflows in separate `*.test.ts` files. Vitest discovers
+them automatically; Invoker does not scan directories or require a central
+index.
 
 The metadata envelope is stable and JSON-compatible:
 
@@ -187,6 +191,44 @@ The metadata envelope is stable and JSON-compatible:
 `output` is present only after a successful, JSON-valid Task return. Vitest's
 report remains authoritative for status, failures, timing, hierarchy, and
 retries.
+
+## Notify Slack
+
+Invoker's optional Slack reporter posts one `Invoker Report` message per Vitest
+run, containing one status-colored card per Workflow. Each card includes
+aggregate results, Workflow metadata, and a table of Task counts and durations.
+A shared footer contains total duration, a localized timestamp, and the
+optional run link. Final failures are posted in one thread with one reply per
+failed Task in each Workflow. Each reply uses a red card with the Task failure
+count, Workflow metadata, matrix coordinates, and concise errors.
+
+```ts
+import { slackReporter } from "@akshatmittal/invoker/slack";
+import { defineConfig } from "vitest/config";
+
+const runUrl =
+  process.env.GITHUB_ACTIONS === "true"
+    ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+    : undefined;
+
+export default defineConfig({
+  test: {
+    reporters: [
+      "tree",
+      slackReporter({
+        token: process.env.SLACK_BOT_TOKEN!,
+        channel: process.env.SLACK_CHANNEL_ID!,
+        runUrl,
+      }),
+    ],
+  },
+});
+```
+
+Create a Slack app with the `chat:write` bot scope, install it to the workspace,
+and expose its bot token and target channel ID as `SLACK_BOT_TOKEN` and
+`SLACK_CHANNEL_ID`. Invite the bot to private target channels. Slack delivery
+failures produce a warning but do not change Vitest's exit status.
 
 ## GitHub Actions artifacts
 
@@ -207,7 +249,7 @@ queries or reports. Invoker does not upload, index, or persist results itself.
 
 ## v1 scope
 
-Invoker does not provide a CLI, directory discovery, custom runner, custom
-reporter, configuration helper, Task-level parallelism, matrix include/exclude,
-or hosted result storage. Use Vitest configuration and your CI runner for those
-concerns.
+Invoker does not provide a CLI, directory discovery, custom runner, general
+reporter framework, configuration helper, Task-level parallelism, matrix
+include/exclude, or hosted result storage. Use Vitest configuration and your CI
+runner for those concerns.

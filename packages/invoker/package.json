@@ -31,6 +31,10 @@
     "./github": {
       "types": "./dist/github.d.mts",
       "import": "./dist/github.mjs"
+    },
+    "./slack": {
+      "types": "./dist/slack.d.mts",
+      "import": "./dist/slack.mjs"
     }
   },
   "publishConfig": {
@@ -44,6 +48,7 @@
   "dependencies": {
     "@octokit/auth-app": "^8.3.0",
     "@octokit/request": "^10.0.13",
+    "@slack/web-api": "^8.0.0",
     "croner": "^10.0.1",
     "evlog": "^2.26.0",
     "zod": "^4.4.3"

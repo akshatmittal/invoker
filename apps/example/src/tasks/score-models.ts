@@ -20,6 +20,9 @@ export const scoreModels = defineTask({
     const threshold = matrix.dataset === "support" ? 0.8 : 0.75;
 
     vitest.expect(setup.caseCount).toBe(4);
+    if (process.env.INVOKER_EXAMPLE_FAILURE === "true" && matrix.model === "candidate") {
+      vitest.expect(score, `simulated ${matrix.dataset} regression`).toBeLessThan(threshold);
+    }
     vitest.expect(score).toBeGreaterThanOrEqual(threshold);
 
     return {

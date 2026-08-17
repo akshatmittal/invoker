@@ -2,7 +2,7 @@
 
 ## Summary
 
-`@akshatmittal/invoker` is a thin, strictly typed regression-suite DSL over Vitest. Authors define reusable Tasks in TypeScript, compose them into Workflows, expand GitHub-style matrix axes into Cases, and run them through ordinary Vitest test modules. Vitest owns discovery, workers, scheduling, filtering, assertions, retries, status, errors, timing, reporters, and process exit. Invoker owns only the regression-specific authoring contract, matrix expansion, shared Task lifecycle, JSON Output capture, and stable metadata envelope.
+`@akshatmittal/invoker` is a thin, strictly typed regression-suite DSL over Vitest. Authors define reusable Tasks in TypeScript, compose them into Workflows, expand GitHub-style matrix axes into Cases, and run them through ordinary Vitest test modules. Vitest owns discovery, workers, scheduling, filtering, assertions, retries, status, errors, timing, and process exit. Invoker owns the regression-specific authoring contract, matrix expansion, shared Task lifecycle, JSON Output capture, stable metadata envelope, and an optional Slack reporter built on Vitest's public reporter API.
 
 The package is intended for organization-wide reuse and public npm publication. It has no application, website, custom runner, CLI, hosted service, or persistence backend.
 
@@ -18,10 +18,11 @@ The package is intended for organization-wide reuse and public npm publication. 
 
 ## Public API
 
-The package has one ESM entry point:
+The package has two ESM entry points:
 
 ```ts
 import { defineTask, defineWorkflow } from "@akshatmittal/invoker";
+import { slackReporter } from "@akshatmittal/invoker/slack";
 ```
 
 It exports these public types:
@@ -140,7 +141,7 @@ Contract:
 - Do not accept concurrency, timeout, retry, reporter, worker, persistence, or other Vitest options.
 - Do not pass Workflow metadata into Task callbacks. A Task needing configuration closes over it when defined.
 - Permit a Task definition to be reused in multiple Workflows.
-- Permit several Workflows in one module, while documenting one Workflow per `index.test.ts` as the normal layout.
+- Permit several Workflows in one module, while documenting one Workflow per `*.test.ts` file as the normal layout.
 
 ## Project layout and execution
 
@@ -148,25 +149,26 @@ Recommended consuming-project layout:
 
 ```text
 regressions/
-  model/
-    index.test.ts
-    tasks/
-      evaluate-models.ts
-      compare-baseline.ts
+  tasks/
+    evaluate-models.ts
+    compare-baseline.ts
+  workflows/
+    model-regressions.test.ts
+    release-regressions.test.ts
 ```
 
-`index.test.ts` explicitly imports its Tasks and calls `defineWorkflow`. Invoker performs no directory scanning.
+Each Workflow test file explicitly imports its Tasks and calls `defineWorkflow` once. Vitest discovers every matching test file; Invoker performs no directory scanning or central index loading.
 
 Run normally through Vitest:
 
 ```bash
-vitest run regressions/model/index.test.ts
+vitest run regressions/workflows/model-regressions.test.ts
 ```
 
 Run one Task through Vitest's full-name regex:
 
 ```bash
-vitest run regressions/model/index.test.ts \
+vitest run regressions/workflows/model-regressions.test.ts \
   -t '^model-regressions > evaluate-models(?: >|$)'
 ```
 
@@ -292,7 +294,7 @@ The shared setup value is not cloned or serialized before Cases receive it. Conc
 
 ## Vitest configuration and reporting
 
-Invoker exports no configuration helper and no reporter. A consuming project configures Vitest directly:
+Invoker exports no configuration helper. A consuming project configures Vitest directly:
 
 ```ts
 import { defineConfig } from "vitest/config";
@@ -318,6 +320,48 @@ Reporter responsibilities:
 
 Because reporters are explicitly configured, the GitHub reporter must also be explicitly included. Do not configure `filterMeta`; consumers query `assertionResults[].meta.invoker` and its `schema: 1` envelope. Vitest's report remains authoritative for status, errors, timing, hierarchy, retries, and IDs.
 
+### Slack reporter
+
+The optional Slack reporter is a separate subpath so the core authoring API does not load Slack code:
+
+```ts
+import { slackReporter } from "@akshatmittal/invoker/slack";
+import { defineConfig } from "vitest/config";
+
+const runUrl =
+  process.env.GITHUB_ACTIONS === "true"
+    ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+    : undefined;
+
+export default defineConfig({
+  test: {
+    reporters: [
+      "tree",
+      slackReporter({
+        token: process.env.SLACK_BOT_TOKEN!,
+        channel: process.env.SLACK_CHANNEL_ID!,
+        runUrl,
+      }),
+    ],
+  },
+});
+```
+
+The public options are only `token`, `channel`, and optional `runUrl`. The reporter:
+
+- Uses `@slack/web-api` with a bot token and channel ID; it does not support incoming webhooks.
+- Filters collected Vitest Cases by `meta.invoker` and derives Workflow and Task names from their registered suite hierarchy.
+- Posts one top-level `Invoker Report` message after the Vitest run, containing one status-colored attachment card per collected Workflow. Each card's headline contains aggregate passed/total counts followed by Workflow metadata.
+- Renders one native Slack table row per Task with final passed, retried, failed, and skipped Case counts plus the Task's Case execution duration. One shared footer after all Workflow cards contains total Task execution duration, a Slack-localized completion timestamp, and the optional run link.
+- Counts a Case in `retried` when its final Vitest diagnostic has a retry count greater than zero. Retried overlaps final status, so a successful retry is both passed and retried.
+- Uses a green status when all Cases pass without retries, yellow when Cases were retried, skipped, or left incomplete, and red when any Case or Workflow-level error remains failed.
+- Posts replies in one thread only when failures exist. Each Workflow gets one red card reply per failed Task combining all of that Task's final failed Cases, with the Task failure count, Workflow metadata, Case name, matrix coordinate, and concise final error messages. Workflow-level errors get their own card. Split a group into numbered replies only when required by Slack's message length limits. Setup, teardown, collection, and unhandled Vitest errors are included when Vitest associates or reports them.
+- Escapes Slack markup in all names, matrices, and errors, and chunks failure details to Slack's message limits.
+- Treats Slack as notification-only: an API failure emits a warning and never changes Vitest's test result or process exit.
+- Sends nothing when no Invoker Workflow was collected. A module that fails before any Invoker Case is collected has no Workflow identity and cannot be reported.
+
+The Slack app needs `chat:write`; it must be a member of private target channels. `runUrl`, when supplied, is rendered as a link to the CI run. Hard process termination cannot trigger `onTestRunEnd` and therefore cannot notify Slack.
+
 The CI workflow creates the output directory, runs Vitest, and uploads `artifacts/invoker-results.json` even when tests fail. The artifact service supplies run identity and retention. Invoker does not generate Run IDs, upload artifacts, index results, read history, or render Task Outputs in GitHub's job summary.
 
 ## Package and repository layout
@@ -339,6 +383,10 @@ Target workspace:
         index.ts
         json.ts
         matrix.ts
+        slack.ts
+        slack/
+          report.ts
+          reporter.ts
         task.ts
         types.ts
         workflow.ts
@@ -374,14 +422,15 @@ Implementation changes:
 - Public npm access and MIT license.
 - ESM-only, `sideEffects: false`, and the existing GitHub repository metadata.
 - Node engine aligned with the root's Node 24 requirement.
-- One `"."` export with compiled ESM and declarations.
+- `"."` and `"./slack"` exports with compiled ESM and declarations.
 - Publish only `dist`, `README.md`, and license material.
-- Reuse tsdown for one `src/index.ts` entry, ESM output, and declarations.
+- Reuse tsdown for `src/index.ts` and `src/slack.ts` entries, ESM output, and declarations.
+- Depend directly on `@slack/web-api` for the optional reporter implementation; do not add Bolt or a Slack abstraction layer.
 - Require `vitest: ^4.1.10` as a peer dependency and a development dependency.
 - Reference Vitest directly rather than adding it to the workspace catalog.
 - Import runtime/types only from documented public `vitest` entry points; never depend directly on internal Vitest packages.
 
-Keep `index.ts` as the public package interface. Internal modules own one cohesive concern each: public data contracts, Task definition, JSON validation, matrix expansion, and Workflow registration. Do not add pass-through layers or plugin abstractions.
+Keep `index.ts` and `slack.ts` as the public package interfaces. Internal modules own one cohesive concern each: public data contracts, Task definition, JSON validation, matrix expansion, Workflow registration, Slack report aggregation, and Slack delivery. Do not add pass-through layers or plugin abstractions.
 
 ## Out of scope for v1
 
@@ -390,7 +439,7 @@ Keep `index.ts` as the public package interface. Internal modules own one cohesi
 - Directory discovery or generated test modules.
 - Matrix `include`, `exclude`, explicit Cases, async discovery, custom names, or arbitrary limits.
 - Invoker-specific status, retry, timing, error, or process-exit model.
-- Invoker reporter, job-summary Output rendering, normalized result file, or config helper.
+- General reporter framework, reporter formatting callbacks, job-summary Output rendering, normalized result file, or config helper.
 - Run IDs, immutable per-run files, artifact upload, retention, hosted storage, indexing, history readers, or query helpers.
 - Website, app, UI package, or web dependency graph.
 
@@ -407,6 +456,7 @@ Add any of these only when a concrete regression suite demonstrates that Vitest'
 7. Implement `defineWorkflow` boundary validation and Vitest registration, setup, retries-safe Output capture, and teardown.
 8. Add the README usage, Vitest configuration, filtering, GitHub Actions artifact guidance, and explicit v1 limits.
 9. Build declarations and inspect the npm tarball contents.
+10. Add the optional Slack reporter subpath, Workflow/Task aggregation, threaded failure delivery, README usage, and example configuration.
 
 Repository instructions prohibit creating tests. Handoff verification is therefore limited to existing static/build/package checks:
 

@@ -30,3 +30,7 @@ Vitest's Jest-compatible JSON document is the canonical retained artifact. Its a
 The JSON reporter writes one configured stable path, such as `artifacts/invoker-results.json`, for the entire Vitest invocation. CI artifact upload provides the durable run identity and retention. Invoker does not generate filenames, create per-Run files, or own upload configuration.
 
 Invoker does not configure `filterMeta`; projects may filter unrelated metadata themselves. A custom Invoker reporter becomes justified only if a demonstrated requirement needs Task Outputs rendered directly in a job summary or needs a report shape Vitest cannot provide.
+
+## Later extension
+
+Slack Workflow notifications became a demonstrated requirement. Invoker now exposes a focused `@akshatmittal/invoker/slack` Vitest reporter that posts one combined parent message with a status-colored card per Workflow, Task-level final counts, a shared run footer, and threaded failure details. The JSON artifact and Vitest status model remain authoritative; this does not introduce a general reporter abstraction or a second result format.

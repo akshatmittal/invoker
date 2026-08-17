@@ -49,10 +49,10 @@ The `run` callback receives `{ matrix, setup, vitest }`, where `vitest` is Vites
 
 `defineWorkflow` accepts only a non-empty literal `name`, optional exact `JsonObject` `metadata`, and a non-empty readonly `tasks` tuple. It validates Workflow metadata and all Task definitions before registering anything, rejects duplicate or empty Task names, then synchronously registers the Vitest hierarchy and returns `void`. It has no runner, concurrency, timeout, retry, reporter, or worker options. Workflow metadata is reporting context and is not passed to Task callbacks.
 
-Multiple Workflows may be registered in one test module, though one Workflow per `index.test.ts` is the documented convention. Names are preserved verbatim; slug-like names are recommended but not enforced. A Task is independently selected through Vitest's full-name filter:
+Multiple Workflows may be registered in one test module, though one Workflow per `*.test.ts` file is the documented convention. Vitest discovers those files; Invoker does not scan directories or require a central index. Names are preserved verbatim; slug-like names are recommended but not enforced. A Task is independently selected through Vitest's full-name filter:
 
 ```bash
-vitest run regressions/model/index.test.ts \
+vitest run regressions/workflows/model-regressions.test.ts \
   -t '^model-regressions > evaluate-models(?: >|$)'
 ```
 
