@@ -1,24 +1,18 @@
-import { createLogger } from "evlog";
+import { log } from "evlog";
 
 import type { DispatchResult, RuntimeSchedule, SafeFailure } from "./client.js";
 
 const SERVICE = "github-schedule";
 
 export function logStartup(schedules: number, repositories: number, workflows: number, failure?: SafeFailure): void {
-  const operation = createLogger({
+  log[failure ? "error" : "info"]({
     service: SERVICE,
     event: "github_schedule.startup",
     schedules,
     repositories,
     workflows,
+    ...(failure ? { outcome: "failure", failure } : { outcome: "success" }),
   });
-  if (failure) {
-    operation.setLevel("error");
-    operation.set({ outcome: "failure", failure });
-  } else {
-    operation.set({ outcome: "success" });
-  }
-  operation.emit();
 }
 
 export function logDispatch(
@@ -27,7 +21,7 @@ export function logDispatch(
   result?: DispatchResult,
   failure?: SafeFailure,
 ): void {
-  const operation = createLogger({
+  log[failure ? "error" : "info"]({
     service: SERVICE,
     event: "github_schedule.dispatch",
     repository: schedule.repository,
@@ -36,23 +30,18 @@ export function logDispatch(
     cron: schedule.cron,
     timezone: schedule.timezone,
     scheduledAt,
+    ...(failure
+      ? { outcome: "failure", failure }
+      : { outcome: "success", runId: result!.runId, runUrl: result!.webUrl }),
   });
-  if (failure) {
-    operation.setLevel("error");
-    operation.set({ outcome: "failure", failure });
-  } else {
-    operation.set({ outcome: "success", runId: result!.runId, runUrl: result!.webUrl });
-  }
-  operation.emit();
 }
 
 export function logShutdown(signal: NodeJS.Signals, drainedDispatches: number): void {
-  const operation = createLogger({
+  log.info({
     service: SERVICE,
     event: "github_schedule.shutdown",
     signal,
     drainedDispatches,
+    outcome: "success",
   });
-  operation.set({ outcome: "success" });
-  operation.emit();
 }
