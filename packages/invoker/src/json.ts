@@ -1,22 +1,16 @@
+import { z } from "zod";
+
 import type { JsonObject, JsonValue } from "./types.js";
 
-export function assertJson(
-  value: unknown,
-  owner: string,
-  path: string,
-  ancestors = new Set<object>(),
-): asserts value is JsonValue {
-  if (value === null || typeof value === "string" || typeof value === "boolean") {
+const scalarSchema = z.union([z.null(), z.string(), z.boolean(), z.number()]);
+const nameSchema = z.string().trim().min(1);
+
+export function assertJson(value: JsonValue, owner: string, path: string, ancestors = new Set<object>()): void {
+  if (scalarSchema.safeParse(value).success) {
     return;
   }
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-      fail(owner, path, "expected a finite number");
-    }
-    return;
-  }
-  if (typeof value !== "object") {
-    fail(owner, path, `expected JSON, received ${typeof value}`);
+  if (!isJsonContainer(value)) {
+    fail(owner, path, "expected JSON");
   }
   if (ancestors.has(value)) {
     fail(owner, path, "cyclic values are not JSON");
@@ -28,7 +22,7 @@ export function assertJson(
       if (!(index in value)) {
         fail(owner, `${path}[${index}]`, "sparse arrays are not JSON");
       }
-      assertJson(value[index], owner, `${path}[${index}]`, ancestors);
+      assertJson(value[index]!, owner, `${path}[${index}]`, ancestors);
     }
   } else {
     assertPlainObject(value, owner, path);
@@ -42,12 +36,8 @@ export function assertJson(
   ancestors.delete(value);
 }
 
-export function assertPlainObject(
-  value: unknown,
-  owner: string,
-  path: string,
-): asserts value is Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+export function assertPlainObject<Value extends object>(value: Value, owner: string, path: string): void {
+  if (Object(value) !== value || Array.isArray(value)) {
     fail(owner, path, "expected a plain object");
   }
   const prototype = Object.getPrototypeOf(value);
@@ -56,13 +46,13 @@ export function assertPlainObject(
   }
 }
 
-export function assertName(value: unknown, owner: string, path: string): asserts value is string {
-  if (typeof value !== "string" || value.trim() === "") {
+export function assertName(value: string, owner: string, path: string): void {
+  if (!nameSchema.safeParse(value).success) {
     fail(owner, path, "expected a non-empty string");
   }
 }
 
-export function assertOnlyKeys(value: Record<string, unknown>, allowed: readonly string[], owner: string): void {
+export function assertOnlyKeys<Value extends object>(value: Value, allowed: readonly string[], owner: string): void {
   for (const key of Object.keys(value)) {
     if (!allowed.includes(key)) {
       fail(owner, `.${key}`, "unknown property");
@@ -74,11 +64,10 @@ export function canonicalJson(value: JsonValue): string {
   if (Array.isArray(value)) {
     return `[${value.map(canonicalJson).join(",")}]`;
   }
-  if (value !== null && typeof value === "object") {
-    const object = value as JsonObject;
-    return `{${Object.keys(object)
+  if (isJsonObject(value)) {
+    return `{${Object.keys(value)
       .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalJson(object[key] as JsonValue)}`)
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key]!)}`)
       .join(",")}}`;
   }
   return JSON.stringify(value);
@@ -86,4 +75,12 @@ export function canonicalJson(value: JsonValue): string {
 
 export function fail(owner: string, path: string, message: string): never {
   throw new TypeError(`${owner}${path}: ${message}`);
+}
+
+function isJsonContainer(value: JsonValue): value is JsonObject | readonly JsonValue[] {
+  return value !== null && Object(value) === value;
+}
+
+function isJsonObject(value: JsonValue): value is JsonObject {
+  return isJsonContainer(value) && !Array.isArray(value);
 }

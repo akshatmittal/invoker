@@ -30,6 +30,15 @@ const dispatchResponseSchema = z.object({
   html_url: z.url(),
 });
 
+const requestFailureSchema = z.object({
+  status: z.int().optional(),
+  response: z
+    .object({
+      headers: z.object({ "x-github-request-id": z.string().optional() }),
+    })
+    .optional(),
+});
+
 const githubFailures = new WeakMap<Error, SafeFailure>();
 
 export function createGitHubClient(app: NormalizedDefinition["app"], signal: AbortSignal) {
@@ -97,18 +106,15 @@ export function createGitHubClient(app: NormalizedDefinition["app"], signal: Abo
   const dispatch = async (target: RuntimeSchedule): Promise<DispatchResult> => {
     try {
       const token = await installationToken(target, target.installationId);
-      const response = (await apiRequest("POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches", {
+      const response = await apiRequest("POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches", {
         owner: target.owner,
         repo: target.repo,
         workflow_id: target.workflowId,
         ref: target.ref,
         return_run_details: true,
-        ...(target.inputs === undefined ? {} : { inputs: target.inputs }),
+        inputs: target.inputs,
         headers: { authorization: `Bearer ${token}` },
-      })) as unknown as { status: number; data: unknown };
-      if (response.status !== 200) {
-        throw new Error("invalid dispatch response");
-      }
+      });
       const data = dispatchResponseSchema.parse(response.data);
       return {
         runId: data.workflow_run_id,
@@ -123,22 +129,20 @@ export function createGitHubClient(app: NormalizedDefinition["app"], signal: Abo
 }
 
 export function githubFailure(
-  error: unknown,
+  cause: unknown,
   operation: string,
   target?: Pick<NormalizedSchedule, "repository" | "workflow">,
 ): SafeFailure {
-  if (error instanceof Error) {
-    const known = githubFailures.get(error);
+  if (cause instanceof Error) {
+    const known = githubFailures.get(cause);
     if (known) {
       return known;
     }
   }
 
-  const source = isRecord(error) ? error : undefined;
-  const response = source && isRecord(source.response) ? source.response : undefined;
-  const headers = response && isRecord(response.headers) ? response.headers : undefined;
-  const status = typeof source?.status === "number" && Number.isInteger(source.status) ? source.status : undefined;
-  const requestId = typeof headers?.["x-github-request-id"] === "string" ? headers["x-github-request-id"] : undefined;
+  const parsed = requestFailureSchema.safeParse(cause);
+  const status = parsed.success ? parsed.data.status : undefined;
+  const requestId = parsed.success ? parsed.data.response?.headers["x-github-request-id"] : undefined;
   const location = target ? ` for ${target.repository} workflow ${String(target.workflow)}` : "";
   const reason = status === 404 ? "not found or inaccessible" : "request failed";
   const message = `GitHub ${operation}${location}: ${reason}${status === undefined ? "" : ` (${status})`}${
@@ -148,9 +152,10 @@ export function githubFailure(
   return {
     message,
     operation,
-    ...(target === undefined ? {} : { repository: target.repository, workflow: target.workflow }),
-    ...(status === undefined ? {} : { status }),
-    ...(requestId === undefined ? {} : { requestId }),
+    repository: target?.repository,
+    workflow: target?.workflow,
+    status,
+    requestId,
   };
 }
 
@@ -158,8 +163,4 @@ export function githubError(failure: SafeFailure): Error {
   const error = new Error(failure.message);
   githubFailures.set(error, failure);
   return error;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
 }

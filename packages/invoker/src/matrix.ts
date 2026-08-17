@@ -1,8 +1,12 @@
-import type { JsonObject, JsonValue } from "./types.js";
+import { z } from "zod";
+
+import type { JsonObject, Matrix } from "./types.js";
 
 import { assertJson, assertPlainObject, canonicalJson, fail } from "./json.js";
 
-export function expandMatrix(matrix: unknown, owner: string): readonly JsonObject[] {
+const axisSchema = z.string();
+
+export function expandMatrix(matrix: Matrix | undefined, owner: string): readonly JsonObject[] {
   if (matrix === undefined) {
     return [{}];
   }
@@ -10,10 +14,12 @@ export function expandMatrix(matrix: unknown, owner: string): readonly JsonObjec
   assertPlainObject(matrix, owner, ".matrix");
   let cases: JsonObject[] = [{}];
 
-  for (const axis of Reflect.ownKeys(matrix)) {
-    if (typeof axis !== "string" || !Object.prototype.propertyIsEnumerable.call(matrix, axis)) {
+  for (const candidate of Reflect.ownKeys(matrix)) {
+    const parsed = axisSchema.safeParse(candidate);
+    if (!parsed.success || !Object.prototype.propertyIsEnumerable.call(matrix, candidate)) {
       fail(owner, ".matrix", "axis names must be enumerable strings");
     }
+    const axis = parsed.data;
     if (axis.trim() === "") {
       fail(owner, ".matrix", "axis names must not be empty");
     }
@@ -34,7 +40,7 @@ export function expandMatrix(matrix: unknown, owner: string): readonly JsonObjec
       assertJson(value, owner, `.matrix.${axis}[${index}]`);
     });
 
-    cases = cases.flatMap((coordinates) => values.map((value) => ({ ...coordinates, [axis]: value as JsonValue })));
+    cases = cases.flatMap((coordinates) => values.map((value) => ({ ...coordinates, [axis]: value })));
   }
 
   const coordinates = new Set<string>();

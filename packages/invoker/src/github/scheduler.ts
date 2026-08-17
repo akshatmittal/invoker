@@ -2,6 +2,7 @@ import { Cron } from "croner";
 
 import type { RuntimeSchedule, SafeFailure } from "./client.js";
 import type { NormalizedDefinition } from "./config.js";
+import type { GitHubScheduleDefinition } from "./types.js";
 
 import { createGitHubClient, githubError, githubFailure } from "./client.js";
 import { GITHUB_SCHEDULE_OWNER as OWNER, normalizeDefinition, workflowKey } from "./config.js";
@@ -9,7 +10,7 @@ import { logDispatch, logShutdown, logStartup } from "./events.js";
 
 let schedulerActive = false;
 
-export async function runGitHubSchedule(definition: unknown): Promise<void> {
+export async function runGitHubSchedule(definition: GitHubScheduleDefinition): Promise<void> {
   let normalized: NormalizedDefinition;
 
   try {
@@ -119,8 +120,8 @@ export async function runGitHubSchedule(definition: unknown): Promise<void> {
           const scheduledAt = (currentJob.currentRun() ?? new Date()).toISOString();
           const dispatch = github.dispatch(schedule).then(
             (result) => logDispatch(schedule, scheduledAt, result),
-            (error: unknown) => {
-              const failure = githubFailure(error, "dispatch workflow", schedule);
+            (cause: unknown) => {
+              const failure = githubFailure(cause, "dispatch workflow", schedule);
               logDispatch(schedule, scheduledAt, undefined, failure);
               throw new Error(failure.message);
             },
@@ -166,9 +167,9 @@ async function finishShutdown(
   logShutdown(signal, drainedCount);
 }
 
-function localFailure(error: unknown): SafeFailure {
+function localFailure(cause: unknown): SafeFailure {
   return {
-    message: error instanceof Error ? error.message : `${OWNER}: startup validation failed`,
+    message: cause instanceof Error ? cause.message : `${OWNER}: startup validation failed`,
     operation: "validate configuration",
   };
 }

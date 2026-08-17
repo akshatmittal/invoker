@@ -19,10 +19,7 @@ export interface TaskDefinition<
 > {
   readonly name: Name;
   readonly matrix: M;
-  readonly [taskDefinitionBrand]: {
-    readonly setup: Setup;
-    readonly output: Output;
-  };
+  readonly [taskDefinitionBrand]: true;
   readonly setup?: (context: SetupContext<M>) => Awaitable<Setup>;
   readonly run: (context: TaskContext<CaseCoordinates<M>, Setup>) => Awaitable<Output>;
   readonly teardown?: (context: TeardownContext<M, Setup>) => Awaitable<void>;
@@ -57,21 +54,20 @@ export function defineTask<
   const Output extends JsonValue = JsonValue,
 >(definition: TaskWithoutSetup<Name, M, Output>): TaskDefinition<Name, M, undefined, Output>;
 
-export function defineTask(definition: unknown): unknown {
+export function defineTask<const Name extends string, const M extends Matrix, Setup, const Output extends JsonValue>(
+  definition: TaskWithSetup<Name, M, Setup, Output> | TaskWithoutSetup<Name, M, Output>,
+) {
   return {
-    ...(definition as RuntimeTask),
-    matrix: (definition as RuntimeTask).matrix ?? {},
-    [taskDefinitionBrand]: true,
+    ...definition,
+    matrix: definition.matrix ?? {},
+    [taskDefinitionBrand]: true as const,
   };
 }
 
 export type AnyTaskDefinition = {
   readonly name: string;
   readonly matrix: Matrix;
-  readonly [taskDefinitionBrand]: {
-    readonly setup: unknown;
-    readonly output: JsonValue;
-  };
+  readonly [taskDefinitionBrand]: true;
 };
 
 export type RuntimeTask = {

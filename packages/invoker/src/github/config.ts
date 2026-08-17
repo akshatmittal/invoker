@@ -1,6 +1,8 @@
 import { Cron } from "croner";
 import { z } from "zod";
 
+import type { GitHubScheduleDefinition } from "./types.js";
+
 export const GITHUB_SCHEDULE_OWNER = "GitHub Schedule";
 
 const inputSchema = z.union([z.string(), z.number().finite(), z.boolean()]);
@@ -44,7 +46,7 @@ export type NormalizedDefinition = {
   schedules: NormalizedSchedule[];
 };
 
-export function normalizeDefinition(value: unknown): NormalizedDefinition {
+export function normalizeDefinition(value: GitHubScheduleDefinition): NormalizedDefinition {
   try {
     const definition = definitionSchema.parse(value);
     const schedules = definition.schedules.map((schedule) => {
@@ -60,7 +62,9 @@ export function normalizeDefinition(value: unknown): NormalizedDefinition {
         validationJob?.stop();
       }
 
-      const [owner, repo] = schedule.repository.split("/") as [string, string];
+      const separator = schedule.repository.indexOf("/");
+      const owner = schedule.repository.slice(0, separator);
+      const repo = schedule.repository.slice(separator + 1);
       return { ...schedule, owner, repo };
     });
 
