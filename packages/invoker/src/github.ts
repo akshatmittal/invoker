@@ -458,6 +458,7 @@ function createGitHubClient(app: GitHubScheduleDefinition["app"], signal: AbortS
         repo: target.repo,
         workflow_id: target.workflowId,
         ref: target.ref,
+        return_run_details: true,
         ...(target.inputs === undefined ? {} : { inputs: target.inputs }),
         headers: { authorization: `Bearer ${token}` },
       })) as unknown as ApiResponse;

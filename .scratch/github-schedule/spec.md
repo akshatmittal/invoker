@@ -92,7 +92,7 @@ Use one `@octokit/auth-app` auth instance with `@octokit/request`. The private G
 
 1. Resolve the installation for a configured repository with an App JWT.
 2. Fetch and validate a configured GitHub Actions Workflow with a repository-scoped installation token.
-3. Dispatch the validated Workflow with a current repository-scoped installation token.
+3. Dispatch the validated Workflow with a current repository-scoped installation token and `return_run_details: true`.
 
 Before every Dispatch, ask auth-app for installation authentication narrowed to the target repository with `actions: write`. Its in-memory 59-minute cache refreshes GitHub's one-hour installation tokens. Do not introduce another token cache, persist tokens, or revoke them explicitly during shutdown.
 
