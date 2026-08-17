@@ -18,8 +18,8 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
   });
 
   return {
-    async onTestRunEnd(modules, unhandledErrors, reason) {
-      const reports = collectWorkflowReports(modules, unhandledErrors, reason);
+    async onTestRunEnd(modules, unhandledErrors) {
+      const reports = collectWorkflowReports(modules, unhandledErrors);
       if (reports.length === 0) return;
 
       try {

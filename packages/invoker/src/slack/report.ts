@@ -1,5 +1,4 @@
 import type { TestModule, TestSuite } from "vitest/node";
-import type { TestRunEndReason } from "vitest/reporters";
 
 import { z } from "zod";
 
@@ -38,7 +37,6 @@ export type TaskReport = {
 export type WorkflowReport = {
   readonly name: string;
   readonly metadata?: JsonObject;
-  readonly reason: TestRunEndReason;
   readonly tasks: readonly TaskReport[];
   readonly failures: readonly Failure[];
 };
@@ -78,7 +76,6 @@ type RawCell = {
 export function collectWorkflowReports(
   modules: ReadonlyArray<TestModule>,
   unhandledErrors: readonly unknown[],
-  reason: TestRunEndReason,
 ): WorkflowReport[] {
   const workflows = new Map<TestSuite, MutableWorkflowReport>();
 
@@ -155,7 +152,6 @@ export function collectWorkflowReports(
     return {
       name: workflow.name,
       metadata: workflow.metadata,
-      reason,
       tasks: [...workflow.tasks.values()].map(
         ({ suite: _suite, failures: _failures, startedAt, endedAt, ...task }) => ({
           ...task,
@@ -176,7 +172,7 @@ export function parentMessage(reports: readonly WorkflowReport[], runUrl?: strin
   const footer = [
     `Total: ${formatDuration(duration)}`,
     `<!date^${timestamp}^{date_short_pretty} at {time}|${new Date(timestamp * 1_000).toISOString()}>`,
-    ...(runUrl ? [`<${escapeSlack(runUrl)}|View run>`] : []),
+    ...(runUrl ? [`<${escapeSlackControl(runUrl)}|View run>`] : []),
   ].join(" • ");
 
   return {
@@ -327,6 +323,10 @@ function deduplicateFailures(failures: Failure[]): Failure[] {
 }
 
 function escapeSlack(value: string): string {
+  return escapeSlackControl(value).replaceAll(/([\\`*_~])/g, "\\$1");
+}
+
+function escapeSlackControl(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
@@ -342,10 +342,7 @@ function workflowStatus(report: WorkflowReport): WorkflowStatus {
     return { emoji: "🔴", color: "danger" };
   }
 
-  if (
-    report.reason !== "passed" ||
-    report.tasks.some((task) => task.retried > 0 || task.skipped > 0 || task.incomplete > 0)
-  ) {
+  if (report.tasks.some((task) => task.retried > 0 || task.skipped > 0 || task.incomplete > 0)) {
     return { emoji: "🟡", color: "warning" };
   }
 
