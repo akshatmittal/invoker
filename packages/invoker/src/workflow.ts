@@ -1,6 +1,7 @@
 import type { TaskMeta } from "vitest";
 
 import { beforeAll, describe, test } from "vitest";
+import { z } from "zod";
 
 import type { AnyTaskDefinition, RuntimeTask } from "./task.js";
 import type { InvokerMeta, JsonObject, JsonValue } from "./types.js";
@@ -25,6 +26,11 @@ type PreparedTask = {
   readonly cases: readonly JsonObject[];
   readonly names: readonly string[];
   readonly metadata: readonly RuntimeInvokerMeta[];
+};
+
+type PreparedWorkflow = {
+  readonly name: string;
+  readonly tasks: readonly PreparedTask[];
 };
 
 export function defineWorkflow<
@@ -54,7 +60,9 @@ export function defineWorkflow<
           const name = prepared.names[index]!;
           const invoker = prepared.metadata[index]!;
 
+          // SAFETY: Invoker writes this metadata and Vitest preserves it on the matching task.
           test.concurrent(name, { meta: { invoker } as TaskMeta }, async (vitest) => {
+            // SAFETY: This callback belongs to the task registered with Invoker metadata above.
             const meta = vitest.task.meta as TaskMeta & {
               invoker: RuntimeInvokerMeta;
             };
@@ -74,10 +82,9 @@ export function defineWorkflow<
   });
 }
 
-function prepareWorkflow(definition: unknown): {
-  readonly name: string;
-  readonly tasks: readonly PreparedTask[];
-} {
+function prepareWorkflow(
+  definition: WorkflowDefinition<readonly [AnyTaskDefinition, ...AnyTaskDefinition[]], JsonObject>,
+): PreparedWorkflow {
   assertPlainObject(definition, "Workflow", "");
   assertOnlyKeys(definition, ["name", "metadata", "tasks"], "Workflow");
   assertName(definition.name, "Workflow", ".name");
@@ -97,10 +104,11 @@ function prepareWorkflow(definition: unknown): {
     const owner = `Workflow ${JSON.stringify(definition.name)} Task ${index + 1}`;
     assertPlainObject(value, owner, "");
 
-    const task = value as RuntimeTask;
-    if (task[taskDefinitionBrand] !== true) {
+    if (value[taskDefinitionBrand] !== true) {
       fail(owner, "", "expected a Task created by defineTask");
     }
+    // SAFETY: The private brand proves this value came from defineTask, which supplies the runtime fields.
+    const task = value as RuntimeTask;
 
     assertOnlyKeys(task, ["name", "matrix", "setup", "run", "teardown"], owner);
     assertName(task.name, owner, ".name");
@@ -110,13 +118,13 @@ function prepareWorkflow(definition: unknown): {
     }
     names.add(task.name);
 
-    if (typeof task.run !== "function") {
+    if (!z.function().safeParse(task.run).success) {
       fail(owner, ".run", "expected a function");
     }
-    if (task.setup !== undefined && typeof task.setup !== "function") {
+    if (task.setup !== undefined && !z.function().safeParse(task.setup).success) {
       fail(owner, ".setup", "expected a function");
     }
-    if (task.teardown !== undefined && typeof task.teardown !== "function") {
+    if (task.teardown !== undefined && !z.function().safeParse(task.teardown).success) {
       fail(owner, ".teardown", "expected a function");
     }
     if (task.teardown && !task.setup) {

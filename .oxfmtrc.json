@@ -39,6 +39,18 @@
     "**/.tanstack/**",
     "pnpm-lock.yaml",
     "**/worker-configuration.d.ts",
-    "**/routeTree.gen.ts"
+    "**/routeTree.gen.ts",
+    ".agent/**",
+    ".agents/**",
+    ".claude/**",
+    ".codex/**",
+    ".continue/**",
+    ".cursor/**",
+    ".gemini/**",
+    ".opencode/**",
+    ".pi/**",
+    ".roo/**",
+    ".windsurf/**",
+    "tools/oxlint/anti-slop/**"
   ]
 }
