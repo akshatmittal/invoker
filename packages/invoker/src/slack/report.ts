@@ -1,9 +1,21 @@
 import type { TestModule, TestSuite } from "vitest/node";
 import type { TestRunEndReason } from "vitest/reporters";
 
-import type { InvokerMeta, JsonObject, JsonValue } from "../types.js";
+import { z } from "zod";
 
-type RuntimeInvokerMeta = InvokerMeta<JsonObject, JsonValue, JsonObject>;
+import type { JsonObject } from "../types.js";
+
+const stringSchema = z.string();
+const jsonObjectSchema = z.record(stringSchema, z.json());
+const invokerMetaSchema = z.strictObject({
+  schema: z.literal(1),
+  matrix: jsonObjectSchema,
+  metadata: jsonObjectSchema.optional(),
+  output: z.json().optional(),
+});
+const testMetaSchema = z.object({ invoker: invokerMetaSchema.optional() });
+const errorMessageSchema = z.object({ message: stringSchema });
+const errorStackSchema = z.object({ stack: stringSchema });
 
 type Failure = {
   readonly task?: string;
@@ -53,6 +65,16 @@ type MutableWorkflowReport = {
   readonly tasks: Map<TestSuite, MutableTaskReport>;
 };
 
+type WorkflowStatus = {
+  readonly emoji: string;
+  readonly color: "danger" | "warning" | "good";
+};
+
+type RawCell = {
+  readonly type: "raw_text";
+  readonly text: string;
+};
+
 export function collectWorkflowReports(
   modules: ReadonlyArray<TestModule>,
   unhandledErrors: readonly unknown[],
@@ -62,7 +84,8 @@ export function collectWorkflowReports(
 
   for (const module of modules) {
     for (const testCase of module.children.allTests()) {
-      const invoker = getInvokerMeta((testCase.meta() as { invoker?: unknown }).invoker);
+      const meta = testMetaSchema.safeParse(testCase.meta());
+      const invoker = meta.success ? meta.data.invoker : undefined;
       const taskSuite = testCase.parent;
       const workflowSuite = taskSuite.type === "suite" ? taskSuite.parent : undefined;
 
@@ -273,27 +296,19 @@ export function failureMessages(report: WorkflowReport) {
   });
 }
 
-function getInvokerMeta(value: unknown): RuntimeInvokerMeta | undefined {
-  if (!value || typeof value !== "object") return undefined;
-
-  const candidate = value as Partial<RuntimeInvokerMeta>;
-  return candidate.schema === 1 && candidate.matrix && typeof candidate.matrix === "object"
-    ? (candidate as RuntimeInvokerMeta)
-    : undefined;
-}
-
 function addErrors(failures: Failure[], errors: readonly unknown[], task?: string): void {
   const messages = errors.map(errorMessage);
   if (messages.length > 0) failures.push({ task, messages });
 }
 
-function errorMessage(error: unknown): string {
-  if (error && typeof error === "object") {
-    if ("message" in error && typeof error.message === "string") return error.message;
-    if ("stack" in error && typeof error.stack === "string") return error.stack.split("\n", 1)[0]!;
-  }
+function errorMessage(cause: unknown): string {
+  const message = errorMessageSchema.safeParse(cause);
+  if (message.success) return message.data.message;
 
-  return String(error);
+  const stack = errorStackSchema.safeParse(cause);
+  if (stack.success) return stack.data.stack.split("\n", 1)[0]!;
+
+  return String(cause);
 }
 
 function deduplicateFailures(failures: Failure[]): Failure[] {
@@ -322,10 +337,7 @@ function taskTotals(tasks: readonly TaskReport[]): Pick<TaskReport, "total" | "p
   });
 }
 
-function workflowStatus(report: WorkflowReport): {
-  readonly emoji: string;
-  readonly color: "danger" | "warning" | "good";
-} {
+function workflowStatus(report: WorkflowReport): WorkflowStatus {
   if (report.failures.length > 0 || report.tasks.some((task) => task.failed > 0)) {
     return { emoji: "🔴", color: "danger" };
   }
@@ -344,16 +356,16 @@ function metadataText(metadata: JsonObject | undefined): string | undefined {
   if (!metadata || Object.keys(metadata).length === 0) return undefined;
 
   const text = Object.entries(metadata)
-    .map(
-      ([key, value]) =>
-        `*${escapeSlack(key)}:* ${escapeSlack(typeof value === "string" ? value : JSON.stringify(value))}`,
-    )
+    .map(([key, value]) => {
+      const string = stringSchema.safeParse(value);
+      return `*${escapeSlack(key)}:* ${escapeSlack(string.success ? string.data : JSON.stringify(value))}`;
+    })
     .join("  •  ");
 
   return text.length > 2_900 ? `${text.slice(0, 2_899)}…` : text;
 }
 
-function rawCell(text: string): { readonly type: "raw_text"; readonly text: string } {
+function rawCell(text: string): RawCell {
   return { type: "raw_text", text };
 }
 
