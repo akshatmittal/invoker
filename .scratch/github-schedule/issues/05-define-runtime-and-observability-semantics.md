@@ -12,7 +12,7 @@ What are the exact startup ordering, cron and timezone semantics, concurrent Dis
 
 Only one `defineGitHubSchedule()` invocation may be active per loaded module instance. A concurrent call rejects; another call is allowed after the active one resolves or rejects.
 
-Startup validates and snapshots the complete definition, claims the active-scheduler slot, installs `SIGINT` and `SIGTERM` handlers, authenticates the App, and verifies each unique repository and GitHub Actions Workflow sequentially. No schedule begins until every target passes. A signal during startup aborts pending GitHub requests, drains them, and resolves normally rather than reporting startup failure.
+Startup validates and snapshots the complete definition, claims the active-scheduler slot, installs `SIGINT` and `SIGTERM` handlers, and verifies each unique repository and GitHub Actions Workflow sequentially. The first repository lookup authenticates the App. No schedule begins until every target passes. A signal during startup aborts pending GitHub requests, drains them, and resolves normally rather than reporting startup failure.
 
 After successful validation, create one Croner job per GitHub Schedule with five-field mode, the normalized timezone, and failure capture. Croner owns timers, next-run calculation, timezone conversion, and cancellation. It waits for the next scheduled occurrence rather than evaluating the partial startup minute. Nonexistent daylight-saving wall-clock times are skipped; a repeated specific wall-clock time runs once at its first occurrence. Missed occurrences during downtime or suspension are not recovered.
 

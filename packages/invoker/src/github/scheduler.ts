@@ -4,7 +4,7 @@ import type { RuntimeSchedule, SafeFailure } from "./client.js";
 import type { NormalizedDefinition } from "./config.js";
 
 import { createGitHubClient, githubError, githubFailure } from "./client.js";
-import { GITHUB_SCHEDULE_OWNER as OWNER, localError, normalizeDefinition, workflowKey } from "./config.js";
+import { GITHUB_SCHEDULE_OWNER as OWNER, normalizeDefinition, workflowKey } from "./config.js";
 import { logDispatch, logShutdown, logStartup } from "./events.js";
 
 let schedulerActive = false;
@@ -15,9 +15,8 @@ export async function runGitHubSchedule(definition: unknown): Promise<void> {
   try {
     normalized = normalizeDefinition(definition);
   } catch (error) {
-    const safeError = localError(error);
-    logStartup(0, 0, 0, localFailure(safeError));
-    throw safeError;
+    logStartup(0, 0, 0, localFailure(error));
+    throw error;
   }
 
   const repositoryCount = new Set(normalized.schedules.map(({ repository }) => repository)).size;
@@ -77,7 +76,6 @@ export async function runGitHubSchedule(definition: unknown): Promise<void> {
 
   try {
     const github = createGitHubClient(normalized.app, startupAbort.signal);
-    await github.authenticate();
 
     const installations = new Map<string, number>();
     for (const schedule of normalized.schedules) {
@@ -87,15 +85,10 @@ export async function runGitHubSchedule(definition: unknown): Promise<void> {
     }
 
     const workflows = new Map<string, number>();
-    for (const [repository, installationId] of installations) {
-      const schedule = normalized.schedules.find((entry) => entry.repository === repository)!;
-      const token = await github.installationToken(schedule, installationId);
-
-      for (const target of normalized.schedules) {
-        const key = workflowKey(target);
-        if (target.repository === repository && !workflows.has(key)) {
-          workflows.set(key, await github.resolveWorkflow(target, token));
-        }
+    for (const schedule of normalized.schedules) {
+      const key = workflowKey(schedule);
+      if (!workflows.has(key)) {
+        workflows.set(key, await github.resolveWorkflow(schedule, installations.get(schedule.repository)!));
       }
     }
 

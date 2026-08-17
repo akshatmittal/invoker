@@ -56,25 +56,19 @@ Only one invocation may be active per loaded module instance. A concurrent invoc
 
 ## Configuration contract
 
-The complete definition is a trust boundary. Before any network request, validate it synchronously and copy it into an immutable internal snapshot so later caller mutation has no effect.
-
-Validation rejects unknown keys and requires ordinary, non-array objects at every object boundary. A local error is a path-specific `TypeError`, for example:
-
-```text
-GitHub Schedule.schedules[0].cron: expected a valid five-field cron expression
-```
+The complete definition is a trust boundary. Before any network request, parse it with Zod into an internal snapshot so later caller mutation has no effect. TypeScript carries the ordinary authoring contract; runtime parsing covers JavaScript callers and constraints TypeScript cannot express. Invalid local configuration rejects with a sanitized `TypeError`.
 
 Rules:
 
 - `app.id` is a positive safe integer.
-- `app.privateKey` is a non-empty PEM private key string.
+- `app.privateKey` is a non-empty string; Octokit validates it when authentication is first needed.
 - `schedules` is non-empty.
 - `repository` is exactly `owner/name`, with two non-empty path segments.
 - `workflow` is either a non-empty filename string or a positive safe integer GitHub Actions Workflow ID.
 - `ref` is a non-empty string and is always explicit.
 - `cron` is a valid five-field cron expression accepted by Croner's five-field mode.
 - `timezone`, when present, is a valid IANA timezone; omission normalizes to `UTC`.
-- `inputs`, when present, is an ordinary object with at most 25 own string properties.
+- `inputs`, when present, is a string-keyed record with at most 25 properties.
 - Every input is a string, boolean, or finite number.
 - The serialized input payload is no larger than GitHub's 65,535-character limit.
 
@@ -96,13 +90,7 @@ Use one `@octokit/auth-app` auth instance with `@octokit/request`. The private G
 
 Before every Dispatch, ask auth-app for installation authentication narrowed to the target repository with `actions: write`. Its in-memory 59-minute cache refreshes GitHub's one-hour installation tokens. Do not introduce another token cache, persist tokens, or revoke them explicitly during shutdown.
 
-Treat every GitHub response as untrusted. Validate only fields consumed by the implementation:
-
-- a positive installation ID;
-- a non-suspended installation with Actions write;
-- a positive GitHub Actions Workflow ID whose state is `active`;
-- valid installation-token metadata;
-- a successful Dispatch response containing a positive Run ID, API URL, and web URL.
+Use Octokit's generated types for authentication, installation, and Workflow responses. Keep runtime checks only for the semantic state consumed by the scheduler: the Workflow must be `active`, and the newer Dispatch response must contain a positive Run ID and web URL.
 
 With Actions-only permission, startup cannot prove that the ref exists, inspect the YAML `workflow_dispatch` declaration, or validate the declared input schema. Those failures remain due-time GitHub errors.
 
@@ -113,11 +101,10 @@ Startup is all-or-nothing and follows this order:
 1. Validate and snapshot the complete local definition.
 2. Claim the module's active-scheduler slot.
 3. Install `SIGINT` and `SIGTERM` handlers.
-4. Authenticate the GitHub App.
-5. Resolve each unique repository installation sequentially.
-6. Mint a repository-scoped token and verify every unique repository/Workflow target sequentially.
-7. Create one Croner job per GitHub Schedule only after every target passes.
-8. Emit one successful `github_schedule.startup` event.
+4. Resolve each unique repository installation sequentially, authenticating the App on the first request.
+5. Mint repository-scoped tokens and verify every unique repository/Workflow target sequentially.
+6. Create one Croner job per GitHub Schedule only after every target passes.
+7. Emit one successful `github_schedule.startup` event.
 
 No timer starts when any local or GitHub startup validation fails. Release the active-scheduler slot, remove signal handlers, emit one sanitized failed startup event, and reject.
 
@@ -278,8 +265,8 @@ The build context excludes `.env`, PEM, and private-key files. Deploy exactly on
 
 ## Implementation sequence
 
-1. Add the independent `src/github.ts` entry, package export, optional Vitest peer metadata, and four direct runtime dependencies.
-2. Implement local validation, normalization, and snapshotting at the public boundary.
+1. Add the independent `src/github.ts` entry, package export, optional Vitest peer metadata, and direct runtime dependencies.
+2. Implement Zod parsing, cron validation, and snapshotting at the public boundary.
 3. Implement the private three-operation GitHub adapter and sanitized error translation.
 4. Implement all-or-nothing startup, Croner job creation, concurrent in-flight tracking, and signal-driven shutdown.
 5. Add the three evlog operation families without global logger initialization.
