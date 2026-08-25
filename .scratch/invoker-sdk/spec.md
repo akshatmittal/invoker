@@ -434,8 +434,8 @@ Implementation changes:
 - `"."` and `"./slack"` exports with compiled ESM and declarations.
 - Publish only `dist`, `README.md`, and license material.
 - Reuse tsdown for `src/index.ts` and `src/slack.ts` entries, ESM output, and declarations.
-- Declare `@slack/web-api` as an optional peer and development dependency for the optional reporter implementation;
-  do not add Bolt or a Slack abstraction layer.
+- Depend directly on `@slack/web-api` for the optional reporter implementation; do not add Bolt or a Slack abstraction
+  layer.
 - Require `vitest: ^4.1.10` as a peer dependency and a development dependency.
 - Reference Vitest directly rather than adding it to the workspace catalog.
 - Import runtime/types only from documented public `vitest` entry points; never depend directly on internal Vitest packages.

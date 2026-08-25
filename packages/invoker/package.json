@@ -46,44 +46,24 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
     "@octokit/auth-app": "^8.3.0",
     "@octokit/request": "^10.0.13",
     "@slack/web-api": "^8.0.0",
-    "@types/node": "catalog:",
-    "@workspace/tsconfig": "workspace:*",
     "croner": "^10.0.1",
     "evlog": "^2.26.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@workspace/tsconfig": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "^4.1.10"
   },
   "peerDependencies": {
-    "@octokit/auth-app": "^8.3.0",
-    "@octokit/request": "^10.0.13",
-    "@slack/web-api": "^8.0.0",
-    "croner": "^10.0.1",
-    "evlog": "^2.26.0",
     "vitest": "^4.1.10"
   },
   "peerDependenciesMeta": {
-    "@octokit/auth-app": {
-      "optional": true
-    },
-    "@octokit/request": {
-      "optional": true
-    },
-    "@slack/web-api": {
-      "optional": true
-    },
-    "croner": {
-      "optional": true
-    },
-    "evlog": {
-      "optional": true
-    },
     "vitest": {
       "optional": true
     }

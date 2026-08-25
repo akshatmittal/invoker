@@ -194,17 +194,17 @@ The `src/github.ts` source graph imports nothing from `src/index.ts`, the root S
 existing Vitest peer optional with `peerDependenciesMeta`, allowing GitHub-only consumers to install without Vitest
 while preserving the documented peer for root SDK consumers.
 
-Declare these integration-only libraries as optional peers and development dependencies with package-local semver
-ranges, not workspace catalog entries:
+Add these direct package dependencies with package-local semver ranges, not workspace catalog entries:
 
 - `@octokit/auth-app` for GitHub App and installation authentication;
 - `@octokit/request` for the narrow REST client;
 - `croner` for scheduling;
 - `evlog` for shared structured logging.
 
-Import every declared runtime dependency directly. GitHub Schedule consumers install its optional peers explicitly;
-core-only consumers do not download them. `@t3-oss/env-core`, Zod, Docker, and the host application are consumer
-concerns and do not belong to the integration dependency graph.
+Import every declared runtime dependency directly. `@t3-oss/env-core`, Zod, Docker, and the host application are
+consumer concerns and do not belong to the package dependency graph. Because both exports share one npm package,
+root-only users also download the GitHub dependencies; splitting the install graph requires a separate npm package and
+is outside this specification.
 
 The implementation change adds a minor Changeset.
 
@@ -213,7 +213,7 @@ The implementation change adds a minor Changeset.
 The README documents a plain ESM host with no TypeScript build:
 
 ```bash
-npm install @akshatmittal/invoker @octokit/auth-app @octokit/request croner evlog @t3-oss/env-core zod
+npm install @akshatmittal/invoker @t3-oss/env-core zod
 ```
 
 ```js

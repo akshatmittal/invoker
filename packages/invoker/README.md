@@ -23,11 +23,10 @@ webhook, install it on the selected repositories, and generate a private key.
 No other repository, organization, user, OAuth, or webhook permissions are
 needed.
 
-Install the scheduler and its optional GitHub integration dependencies with t3-env and Zod in a plain ESM
-application:
+Install the scheduler with t3-env and Zod in a plain ESM application:
 
 ```sh
-npm install @akshatmittal/invoker @octokit/auth-app @octokit/request croner evlog @t3-oss/env-core zod
+npm install @akshatmittal/invoker @t3-oss/env-core zod
 ```
 
 ```js
@@ -206,12 +205,6 @@ Workflow. Unhandled run errors are reported once. Delivery failures are
 isolated to the affected reply. Ambiguous transport failures are not retried;
 an explicit Slack rate-limit rejection is reattempted only after its required
 delay.
-
-Install the optional Slack client alongside Invoker and Vitest:
-
-```sh
-pnpm add -D @akshatmittal/invoker @slack/web-api vitest
-```
 
 ```ts
 import { slackReporter } from "@akshatmittal/invoker/slack";
