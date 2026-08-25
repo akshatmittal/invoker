@@ -86,9 +86,7 @@ function prepareWorkflow(
 ): PreparedWorkflow {
   assertPlainObject(definition, "Workflow", "");
   assertOnlyKeys(definition, ["name", "metadata", "tasks"], "Workflow");
-  const name = definition.name;
-  const workflowMetadata = definition.metadata;
-  const taskDefinitions = definition.tasks;
+  const { name, metadata: workflowMetadata, tasks: taskDefinitions } = definition;
   assertName(name, "Workflow", ".name");
 
   const metadata =

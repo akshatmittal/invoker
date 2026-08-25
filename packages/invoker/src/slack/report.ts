@@ -153,8 +153,7 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
       addErrors(failures, task.suite.errors(), task.name);
     }
 
-    const startedAt = minimum(collectedTasks.flatMap((task) => (task.startedAt === undefined ? [] : [task.startedAt])));
-    const endedAt = maximum(collectedTasks.flatMap((task) => (task.endedAt === undefined ? [] : [task.endedAt])));
+    const { startedAt, endedAt } = timeSpan(collectedTasks);
 
     return {
       name: workflow.name,
@@ -172,8 +171,7 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
 
 export function summaryMessages(reports: readonly WorkflowReport[], runUrl?: string) {
   const timestamp = Math.floor(Date.now() / 1_000);
-  const startedAt = minimum(reports.flatMap((report) => (report.startedAt === undefined ? [] : [report.startedAt])));
-  const endedAt = maximum(reports.flatMap((report) => (report.endedAt === undefined ? [] : [report.endedAt])));
+  const { startedAt, endedAt } = timeSpan(reports);
   const duration = startedAt === undefined || endedAt === undefined ? 0 : endedAt - startedAt;
   const footer = [
     `Elapsed: ${formatDuration(duration)}`,
@@ -467,14 +465,12 @@ function truncate(value: string, limit: number): string {
   return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
 }
 
-function minimum(values: readonly number[]): number | undefined {
-  let result: number | undefined;
-  for (const value of values) result = result === undefined ? value : Math.min(result, value);
-  return result;
-}
-
-function maximum(values: readonly number[]): number | undefined {
-  let result: number | undefined;
-  for (const value of values) result = result === undefined ? value : Math.max(result, value);
-  return result;
+function timeSpan(values: readonly { readonly startedAt?: number; readonly endedAt?: number }[]) {
+  let startedAt: number | undefined;
+  let endedAt: number | undefined;
+  for (const value of values) {
+    if (value.startedAt !== undefined) startedAt = Math.min(startedAt ?? value.startedAt, value.startedAt);
+    if (value.endedAt !== undefined) endedAt = Math.max(endedAt ?? value.endedAt, value.endedAt);
+  }
+  return { startedAt, endedAt };
 }
