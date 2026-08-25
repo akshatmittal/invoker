@@ -10,7 +10,7 @@ validated JSON Output in Vitest metadata for reporters and later analysis.
 pnpm add -D @akshatmittal/invoker vitest
 ```
 
-Invoker supports Node 24 and Vitest 4.1.10 or newer within Vitest 4.
+Invoker supports Node 24.18.1 or newer within Node 24 and Vitest 4.1.10 or newer within Vitest 4.
 
 ## Schedule GitHub Actions
 
@@ -194,13 +194,17 @@ retries.
 
 ## Notify Slack
 
-Invoker's optional Slack reporter posts one `Invoker Report` message per Vitest
-run, containing one status-colored card per Workflow. Each card includes
+Invoker's optional Slack reporter posts one `Invoker Report` parent message per
+Vitest run. It places additional Workflow cards in the message thread so every
+Task table remains within Slack's row and character limits. Each card includes
 aggregate results, Workflow metadata, and a table of Task counts and durations.
-A shared footer contains total duration, a localized timestamp, and the
-optional run link. Final failures are posted in one thread with one reply per
-failed Task in each Workflow. Each reply uses a red card with the Task failure
-count, Workflow metadata, matrix coordinates, and concise errors.
+A shared footer contains the elapsed span from the first Case start to the final
+Case completion, a localized timestamp, and the optional run link. Final
+failures are posted in the same thread with one reply per failed Task in each
+Workflow. Unhandled run errors are reported once. Delivery failures are
+isolated to the affected reply. Ambiguous transport failures are not retried;
+an explicit Slack rate-limit rejection is reattempted only after its required
+delay.
 
 ```ts
 import { slackReporter } from "@akshatmittal/invoker/slack";

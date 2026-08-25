@@ -15,6 +15,11 @@ const invokerMetaSchema = z.strictObject({
 const testMetaSchema = z.object({ invoker: invokerMetaSchema.optional() });
 const errorMessageSchema = z.object({ message: stringSchema });
 const errorStackSchema = z.object({ stack: stringSchema });
+const TABLE_ROW_LIMIT = 100;
+const TABLE_CHARACTER_LIMIT = 10_000;
+const SECTION_CHARACTER_LIMIT = 3_000;
+const NAME_CHARACTER_LIMIT = 200;
+const METADATA_CHARACTER_LIMIT = 1_800;
 
 type Failure = {
   readonly task?: string;
@@ -39,6 +44,8 @@ export type WorkflowReport = {
   readonly metadata?: JsonObject;
   readonly tasks: readonly TaskReport[];
   readonly failures: readonly Failure[];
+  readonly startedAt?: number;
+  readonly endedAt?: number;
 };
 
 type MutableTaskReport = {
@@ -73,10 +80,7 @@ type RawCell = {
   readonly text: string;
 };
 
-export function collectWorkflowReports(
-  modules: ReadonlyArray<TestModule>,
-  unhandledErrors: readonly unknown[],
-): WorkflowReport[] {
+export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): WorkflowReport[] {
   const workflows = new Map<TestSuite, MutableWorkflowReport>();
 
   for (const module of modules) {
@@ -142,60 +146,77 @@ export function collectWorkflowReports(
     const failures: Failure[] = [];
     addErrors(failures, workflow.suite.errors());
     addErrors(failures, workflow.module.errors());
-    addErrors(failures, unhandledErrors);
 
-    for (const task of workflow.tasks.values()) {
+    const collectedTasks = [...workflow.tasks.values()];
+    for (const task of collectedTasks) {
       failures.push(...task.failures);
       addErrors(failures, task.suite.errors(), task.name);
     }
 
+    const { startedAt, endedAt } = timeSpan(collectedTasks);
+
     return {
       name: workflow.name,
       metadata: workflow.metadata,
-      tasks: [...workflow.tasks.values()].map(
-        ({ suite: _suite, failures: _failures, startedAt, endedAt, ...task }) => ({
-          ...task,
-          duration: startedAt === undefined || endedAt === undefined ? 0 : endedAt - startedAt,
-        }),
-      ),
+      tasks: collectedTasks.map(({ suite: _suite, failures: _failures, startedAt, endedAt, ...task }) => ({
+        ...task,
+        duration: startedAt === undefined || endedAt === undefined ? 0 : endedAt - startedAt,
+      })),
       failures: deduplicateFailures(failures),
+      startedAt,
+      endedAt,
     };
   });
 }
 
-export function parentMessage(reports: readonly WorkflowReport[], runUrl?: string) {
+export function summaryMessages(reports: readonly WorkflowReport[], runUrl?: string) {
   const timestamp = Math.floor(Date.now() / 1_000);
-  const duration = reports.reduce(
-    (total, report) => total + report.tasks.reduce((workflow, task) => workflow + task.duration, 0),
-    0,
-  );
+  const { startedAt, endedAt } = timeSpan(reports);
+  const duration = startedAt === undefined || endedAt === undefined ? 0 : endedAt - startedAt;
   const footer = [
-    `Total: ${formatDuration(duration)}`,
+    `Elapsed: ${formatDuration(duration)}`,
     `<!date^${timestamp}^{date_short_pretty} at {time}|${new Date(timestamp * 1_000).toISOString()}>`,
     ...(runUrl ? [`<${escapeSlackControl(runUrl)}|View run>`] : []),
   ].join(" • ");
+  const attachments = reports.flatMap(workflowAttachments);
 
-  return {
-    text: "Invoker Report",
+  return attachments.map((attachment, index) => ({
+    text: index === 0 ? "Invoker Report" : "Invoker Report (continued)",
     attachments: [
-      ...reports.map(workflowAttachment),
-      {
-        blocks: [
-          {
-            type: "context" as const,
-            elements: [{ type: "mrkdwn" as const, text: footer }],
-          },
-        ],
-      },
+      attachment,
+      ...(index === 0
+        ? [
+            {
+              blocks: [
+                {
+                  type: "context" as const,
+                  elements: [{ type: "mrkdwn" as const, text: footer }],
+                },
+              ],
+            },
+          ]
+        : []),
     ],
-  };
+  }));
 }
 
-function workflowAttachment(report: WorkflowReport) {
+function workflowAttachments(report: WorkflowReport) {
+  const tables = taskTables(report.tasks);
+
+  return tables.map((rows, index) => workflowAttachment(report, rows, index, tables.length));
+}
+
+function workflowAttachment(
+  report: WorkflowReport,
+  rows: readonly (readonly RawCell[])[],
+  index: number,
+  pages: number,
+) {
   const totals = taskTotals(report.tasks);
   const status = workflowStatus(report);
   const metadata = metadataText(report.metadata);
-  const headline = `${status.emoji} *${escapeSlack(report.name)} — ${totals.passed}/${totals.total} passed*`;
+  const page = pages > 1 ? ` (${index + 1}/${pages})` : "";
+  const headline = `${status.emoji} *${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))} — ${totals.passed}/${totals.total} passed${page}*`;
 
   return {
     color: status.color,
@@ -222,19 +243,7 @@ function workflowAttachment(report: WorkflowReport) {
           { align: "right" as const },
           { align: "right" as const },
         ],
-        rows: [
-          ["Task", "Passed", "Retries", "Failed", "Skipped", "Time"].map(rawCell),
-          ...report.tasks.map((task) =>
-            [
-              task.name,
-              String(task.passed),
-              String(task.retried),
-              String(task.failed),
-              String(task.skipped),
-              formatDuration(task.duration),
-            ].map(rawCell),
-          ),
-        ],
+        rows,
       },
     ],
   };
@@ -244,8 +253,8 @@ export function failureMessages(report: WorkflowReport) {
   const groups = Map.groupBy(report.failures, (failure) => failure.task);
 
   return [...groups].flatMap(([task, failures]) => {
-    const title = escapeSlack(task ?? "Workflow errors");
-    const workflow = `*Workflow:* ${escapeSlack(report.name)}`;
+    const title = escapeSlack(truncate(task ?? "Workflow errors", NAME_CHARACTER_LIMIT));
+    const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
     const metadata = metadataText(report.metadata);
     const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
     const entries = failures.map((failure) => {
@@ -261,7 +270,7 @@ export function failureMessages(report: WorkflowReport) {
 
     return chunk(entries, 3_000).map((details, index, messages) => {
       const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
-      const summary = `${report.name} › ${task ?? "Workflow"} — ${failures.length} failed${part}`;
+      const summary = `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task ?? "Workflow", NAME_CHARACTER_LIMIT)} — ${failures.length} failed${part}`;
 
       return {
         text: summary,
@@ -289,6 +298,33 @@ export function failureMessages(report: WorkflowReport) {
         ],
       };
     });
+  });
+}
+
+export function unhandledErrorMessages(errors: readonly unknown[]) {
+  const messages = [...new Set(errors.map(errorMessage))];
+  const entries = messages.map((message) => `• ${escapeSlack(message)}`);
+
+  return chunk(entries, SECTION_CHARACTER_LIMIT).map((details, index, chunks) => {
+    const part = chunks.length > 1 ? ` (${index + 1}/${chunks.length})` : "";
+    return {
+      text: `Invoker run — ${messages.length} unhandled error${messages.length === 1 ? "" : "s"}${part}`,
+      attachments: [
+        {
+          color: "danger",
+          blocks: [
+            {
+              type: "section" as const,
+              text: { type: "mrkdwn" as const, text: `🔴 *Run errors${part}*` },
+            },
+            {
+              type: "section" as const,
+              text: { type: "mrkdwn" as const, text: details },
+            },
+          ],
+        },
+      ],
+    };
   });
 }
 
@@ -359,11 +395,48 @@ function metadataText(metadata: JsonObject | undefined): string | undefined {
     })
     .join("  •  ");
 
-  return text.length > 2_900 ? `${text.slice(0, 2_899)}…` : text;
+  return truncate(text, METADATA_CHARACTER_LIMIT);
 }
 
 function rawCell(text: string): RawCell {
   return { type: "raw_text", text };
+}
+
+function taskTables(tasks: readonly TaskReport[]): readonly (readonly (readonly RawCell[])[])[] {
+  const header = ["Task", "Passed", "Retries", "Failed", "Skipped", "Time"].map(rawCell);
+  const headerCharacters = rowCharacters(header);
+  const tables: RawCell[][][] = [];
+  let rows: RawCell[][] = [header];
+  let characters = headerCharacters;
+
+  for (const task of tasks) {
+    const values = [
+      String(task.passed),
+      String(task.retried),
+      String(task.failed),
+      String(task.skipped),
+      formatDuration(task.duration),
+    ];
+    const taskNameLimit =
+      TABLE_CHARACTER_LIMIT - headerCharacters - values.reduce((total, value) => total + value.length, 0);
+    const row = [truncate(task.name, taskNameLimit), ...values].map(rawCell);
+    const rowLength = rowCharacters(row);
+
+    if (rows.length === TABLE_ROW_LIMIT || characters + rowLength > TABLE_CHARACTER_LIMIT) {
+      tables.push(rows);
+      rows = [header];
+      characters = headerCharacters;
+    }
+    rows.push(row);
+    characters += rowLength;
+  }
+
+  tables.push(rows);
+  return tables;
+}
+
+function rowCharacters(row: readonly RawCell[]): number {
+  return row.reduce((total, cell) => total + cell.text.length, 0);
 }
 
 function formatDuration(milliseconds: number): string {
@@ -386,4 +459,18 @@ function chunk(entries: readonly string[], limit: number): string[] {
   }
 
   return chunks;
+}
+
+function truncate(value: string, limit: number): string {
+  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
+}
+
+function timeSpan(values: readonly { readonly startedAt?: number; readonly endedAt?: number }[]) {
+  let startedAt: number | undefined;
+  let endedAt: number | undefined;
+  for (const value of values) {
+    if (value.startedAt !== undefined) startedAt = Math.min(startedAt ?? value.startedAt, value.startedAt);
+    if (value.endedAt !== undefined) endedAt = Math.max(endedAt ?? value.endedAt, value.endedAt);
+  }
+  return { startedAt, endedAt };
 }

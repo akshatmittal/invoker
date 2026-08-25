@@ -190,7 +190,9 @@ Add the subpath export beside the existing root export:
 }
 ```
 
-The `src/github.ts` source graph imports nothing from `src/index.ts`, the root SDK implementation, or Vitest. Mark the existing Vitest peer optional with `peerDependenciesMeta`, allowing GitHub-only consumers to install without Vitest while preserving the documented peer for root SDK consumers.
+The `src/github.ts` source graph imports nothing from `src/index.ts`, the root SDK implementation, or Vitest. Mark the
+existing Vitest peer optional with `peerDependenciesMeta`, allowing GitHub-only consumers to install without Vitest
+while preserving the documented peer for root SDK consumers.
 
 Add these direct package dependencies with package-local semver ranges, not workspace catalog entries:
 
@@ -199,7 +201,10 @@ Add these direct package dependencies with package-local semver ranges, not work
 - `croner` for scheduling;
 - `evlog` for shared structured logging.
 
-Import every declared runtime dependency directly. `@t3-oss/env-core`, Zod, Docker, and the host application are consumer concerns and do not belong to the package dependency graph. Because both exports share one npm package, root-only users also download the GitHub dependencies; splitting the install graph requires a separate npm package and is outside this specification.
+Import every declared runtime dependency directly. `@t3-oss/env-core`, Zod, Docker, and the host application are
+consumer concerns and do not belong to the package dependency graph. Because both exports share one npm package,
+root-only users also download the GitHub dependencies; splitting the install graph requires a separate npm package and
+is outside this specification.
 
 The implementation change adds a minor Changeset.
 

@@ -5,9 +5,19 @@ import type { JsonObject, JsonValue } from "./types.js";
 const scalarSchema = z.union([z.null(), z.string(), z.boolean(), z.number()]);
 const nameSchema = z.string().trim().min(1);
 
-export function assertJson(value: JsonValue, owner: string, path: string, ancestors = new Set<object>()): void {
+export function snapshotJson<const Value extends JsonValue>(
+  value: Value,
+  owner: string,
+  path: string,
+  ancestors = new Set<object>(),
+): Value {
+  // SAFETY: The recursive copy preserves every JSON primitive, array, and object shape in Value.
+  return cloneJson(value, owner, path, ancestors) as Value;
+}
+
+function cloneJson(value: JsonValue, owner: string, path: string, ancestors: Set<object>): JsonValue {
   if (scalarSchema.safeParse(value).success) {
-    return;
+    return value;
   }
   if (!isJsonContainer(value)) {
     fail(owner, path, "expected JSON");
@@ -18,22 +28,26 @@ export function assertJson(value: JsonValue, owner: string, path: string, ancest
 
   ancestors.add(value);
   if (Array.isArray(value)) {
+    const snapshot: JsonValue[] = [];
     for (let index = 0; index < value.length; index += 1) {
       if (!(index in value)) {
         fail(owner, `${path}[${index}]`, "sparse arrays are not JSON");
       }
-      assertJson(value[index]!, owner, `${path}[${index}]`, ancestors);
+      snapshot.push(cloneJson(value[index]!, owner, `${path}[${index}]`, ancestors));
     }
+    ancestors.delete(value);
+    return snapshot;
   } else {
     assertPlainObject(value, owner, path);
     if (Object.getOwnPropertySymbols(value).length > 0) {
       fail(owner, path, "JSON objects cannot have symbol keys");
     }
-    for (const [key, child] of Object.entries(value)) {
-      assertJson(child, owner, `${path}.${key}`, ancestors);
-    }
+    const snapshot = Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, cloneJson(child, owner, `${path}.${key}`, ancestors)]),
+    );
+    ancestors.delete(value);
+    return snapshot;
   }
-  ancestors.delete(value);
 }
 
 export function assertPlainObject<Value extends object>(value: Value, owner: string, path: string): void {

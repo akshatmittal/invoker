@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { AnyTaskDefinition, RuntimeTask } from "./task.js";
 import type { InvokerMeta, JsonObject, JsonValue } from "./types.js";
 
-import { assertJson, assertName, assertOnlyKeys, assertPlainObject, fail } from "./json.js";
+import { assertName, assertOnlyKeys, assertPlainObject, fail, snapshotJson } from "./json.js";
 import { caseName, expandMatrix } from "./matrix.js";
 import { taskDefinitionBrand } from "./task.js";
 
@@ -73,8 +73,7 @@ export function defineWorkflow<
               setup,
               vitest,
             });
-            assertJson(output, `Task ${JSON.stringify(prepared.task.name)}`, ".output");
-            meta.invoker.output = structuredClone(output);
+            meta.invoker.output = snapshotJson(output, `Task ${JSON.stringify(prepared.task.name)}`, ".output");
           });
         }
       });
@@ -87,21 +86,24 @@ function prepareWorkflow(
 ): PreparedWorkflow {
   assertPlainObject(definition, "Workflow", "");
   assertOnlyKeys(definition, ["name", "metadata", "tasks"], "Workflow");
-  assertName(definition.name, "Workflow", ".name");
+  const { name, metadata: workflowMetadata, tasks: taskDefinitions } = definition;
+  assertName(name, "Workflow", ".name");
 
-  const metadata = definition.metadata;
+  const metadata =
+    workflowMetadata === undefined
+      ? undefined
+      : snapshotJson(workflowMetadata, `Workflow ${JSON.stringify(name)}`, ".metadata");
   if (metadata !== undefined) {
-    assertJson(metadata, `Workflow ${JSON.stringify(definition.name)}`, ".metadata");
-    assertPlainObject(metadata, `Workflow ${JSON.stringify(definition.name)}`, ".metadata");
+    assertPlainObject(metadata, `Workflow ${JSON.stringify(name)}`, ".metadata");
   }
 
-  if (!Array.isArray(definition.tasks) || definition.tasks.length === 0) {
+  if (!Array.isArray(taskDefinitions) || taskDefinitions.length === 0) {
     fail("Workflow", ".tasks", "expected a non-empty Task tuple");
   }
 
   const names = new Set<string>();
-  const tasks = definition.tasks.map((value, index) => {
-    const owner = `Workflow ${JSON.stringify(definition.name)} Task ${index + 1}`;
+  const tasks = taskDefinitions.map((value, index) => {
+    const owner = `Workflow ${JSON.stringify(name)} Task ${index + 1}`;
     assertPlainObject(value, owner, "");
 
     if (value[taskDefinitionBrand] !== true) {
@@ -111,29 +113,30 @@ function prepareWorkflow(
     const task = value as RuntimeTask;
 
     assertOnlyKeys(task, ["name", "matrix", "setup", "run", "teardown"], owner);
-    assertName(task.name, owner, ".name");
+    const taskSnapshot = { ...task };
+    assertName(taskSnapshot.name, owner, ".name");
 
-    if (names.has(task.name)) {
-      fail(owner, ".name", `duplicate Task name ${JSON.stringify(task.name)}`);
+    if (names.has(taskSnapshot.name)) {
+      fail(owner, ".name", `duplicate Task name ${JSON.stringify(taskSnapshot.name)}`);
     }
-    names.add(task.name);
+    names.add(taskSnapshot.name);
 
-    if (!z.function().safeParse(task.run).success) {
+    if (!z.function().safeParse(taskSnapshot.run).success) {
       fail(owner, ".run", "expected a function");
     }
-    if (task.setup !== undefined && !z.function().safeParse(task.setup).success) {
+    if (taskSnapshot.setup !== undefined && !z.function().safeParse(taskSnapshot.setup).success) {
       fail(owner, ".setup", "expected a function");
     }
-    if (task.teardown !== undefined && !z.function().safeParse(task.teardown).success) {
+    if (taskSnapshot.teardown !== undefined && !z.function().safeParse(taskSnapshot.teardown).success) {
       fail(owner, ".teardown", "expected a function");
     }
-    if (task.teardown && !task.setup) {
+    if (taskSnapshot.teardown && !taskSnapshot.setup) {
       fail(owner, ".teardown", "requires setup");
     }
 
-    const cases = expandMatrix(task.matrix, `Task ${JSON.stringify(task.name)}`);
+    const cases = expandMatrix(taskSnapshot.matrix, `Task ${JSON.stringify(taskSnapshot.name)}`);
     return {
-      task,
+      task: taskSnapshot,
       cases,
       names: cases.map(caseName),
       metadata: cases.map((matrix) =>
@@ -142,5 +145,5 @@ function prepareWorkflow(
     } satisfies PreparedTask;
   });
 
-  return { name: definition.name, tasks };
+  return { name, tasks };
 }
