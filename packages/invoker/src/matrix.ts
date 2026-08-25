@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import type { JsonObject, Matrix } from "./types.js";
 
-import { assertJson, assertPlainObject, canonicalJson, fail } from "./json.js";
+import { assertPlainObject, canonicalJson, fail, snapshotJson } from "./json.js";
 
 const axisSchema = z.string();
 
@@ -36,20 +36,17 @@ export function expandMatrix(matrix: Matrix | undefined, owner: string): readonl
       fail(owner, `.matrix.${axis}`, "expected at least one value");
     }
 
-    values.forEach((value, index) => {
-      assertJson(value, owner, `.matrix.${axis}[${index}]`);
-    });
-
-    cases = cases.flatMap((coordinates) => values.map((value) => ({ ...coordinates, [axis]: value })));
-  }
-
-  const coordinates = new Set<string>();
-  for (const value of cases) {
-    const key = canonicalJson(value);
-    if (coordinates.has(key)) {
-      fail(owner, ".matrix", `duplicate coordinate ${JSON.stringify(value)}`);
+    const snapshots = values.map((value, index) => snapshotJson(value, owner, `.matrix.${axis}[${index}]`));
+    const axisValues = new Set<string>();
+    for (const [index, value] of snapshots.entries()) {
+      const key = canonicalJson(value);
+      if (axisValues.has(key)) {
+        fail(owner, `.matrix.${axis}[${index}]`, `duplicate axis value ${JSON.stringify(value)}`);
+      }
+      axisValues.add(key);
     }
-    coordinates.add(key);
+
+    cases = cases.flatMap((coordinates) => snapshots.map((value) => ({ ...coordinates, [axis]: value })));
   }
 
   return cases;

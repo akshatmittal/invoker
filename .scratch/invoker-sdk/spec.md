@@ -198,7 +198,9 @@ Rules:
 - Preserve axis object insertion order and value array order.
 - The first axis changes slowest; the last changes fastest.
 - Coordinates are the semantic Case identity. Vitest owns internal IDs.
-- Reject duplicate coordinates. Object key order is ignored for duplicate comparison; array order is significant.
+- Snapshot each axis value before expansion so later caller mutation cannot affect Cases.
+- Reject duplicate values within each axis before expanding the Cartesian product. Object key order is ignored for
+  duplicate comparison; array order is significant.
 
 For the example, expansion order is:
 
@@ -232,7 +234,8 @@ A matrixless Case is named `[1]`.
 7. Register every expanded Case individually with `test.concurrent(caseName, { meta }, callback)`. Do not use `test.concurrent.for`, because each Case needs distinct static metadata before setup or execution.
 8. At the start of every Case attempt, remove any prior `meta.invoker.output`.
 9. Call `run` with its coordinate, shared setup value or `undefined`, and the current `TestContext`.
-10. Validate the returned Output as JSON, then assign a structured clone to `vitest.task.meta.invoker.output`.
+10. Snapshot and validate the returned Output in one traversal, then assign that snapshot to
+    `vitest.task.meta.invoker.output`.
 11. When teardown exists, return it as the `beforeAll` cleanup; Vitest calls it only after setup completed successfully with the same setup reference and Cases.
 
 Invoker attaches this static metadata during collection:
@@ -269,7 +272,9 @@ Reject with the owning Workflow or Task and exact property path:
 - Non-enumerable, symbol, or array-index matrix axes; non-array axes; empty axis arrays; empty/whitespace-only
   names; and duplicate coordinates.
 
-Matrix and Task validation occurs before that Task is registered; Workflow metadata and the full Task list are validated before the Workflow suite is registered. Output validation occurs after `run` resolves and fails that Case through an ordinary thrown validation error.
+Matrix values, Workflow metadata, and Task definitions are snapshotted before registration so later caller mutation has
+no effect. Output validation occurs after `run` resolves and fails that Case through an ordinary thrown validation
+error.
 
 Use a small internal recursive validator and canonical JSON key generator; add no validation or serialization dependency. Canonicalization recursively sorts object keys for duplicate comparison while preserving array order.
 
@@ -351,13 +356,17 @@ The public options are only `token`, `channel`, and optional `runUrl`. The repor
 
 - Uses `@slack/web-api` with a bot token and channel ID; it does not support incoming webhooks.
 - Filters collected Vitest Cases by `meta.invoker` and derives Workflow and Task names from their registered suite hierarchy.
-- Posts one top-level `Invoker Report` message after the Vitest run, containing one status-colored attachment card per collected Workflow. Each card's headline contains aggregate passed/total counts followed by Workflow metadata.
-- Renders one native Slack table row per Task with final passed, retried, failed, and skipped Case counts plus the Task's Case execution duration. One shared footer after all Workflow cards contains total Task execution duration, a Slack-localized completion timestamp, and the optional run link.
+- Posts one top-level `Invoker Report` message after the Vitest run. Additional status-colored Workflow cards are
+  threaded so each message remains within Slack's table row and character limits. Each card's headline contains
+  aggregate passed/total counts followed by Workflow metadata.
+- Renders one native Slack table row per Task with final passed, retried, failed, and skipped Case counts plus the Task's Case execution duration. One shared footer contains the elapsed span from the first Case start to the final Case completion, a Slack-localized completion timestamp, and the optional run link.
 - Counts a Case in `retried` when its final Vitest diagnostic has a retry count greater than zero. Retried overlaps final status, so a successful retry is both passed and retried.
 - Uses a green status when all Cases pass without retries, yellow when Cases were retried, skipped, or left incomplete, and red when any Case or Workflow-level error remains failed.
-- Posts replies in one thread only when failures exist. Each Workflow gets one red card reply per failed Task combining all of that Task's final failed Cases, with the Task failure count, Workflow metadata, Case name, matrix coordinate, and concise final error messages. Workflow-level errors get their own card. Split a group into numbered replies only when required by Slack's message length limits. Setup, teardown, collection, and unhandled Vitest errors are included when Vitest associates or reports them.
+- Posts failure replies in the report thread. Each Workflow gets one red card reply per failed Task combining all of that Task's final failed Cases, with the Task failure count, Workflow metadata, Case name, matrix coordinate, and concise final error messages. Workflow-level errors get their own card. Unhandled Vitest errors are reported once at Run level. Split a group into numbered replies only when required by Slack's message length limits.
 - Escapes Slack markup in all names, matrices, and errors, and chunks failure details to Slack's message limits.
-- Treats Slack as notification-only: an API failure emits a warning and never changes Vitest's test result or process exit.
+- Disables automatic retries because an uncertain `chat.postMessage` result could duplicate a message. Explicit rate-limit
+  rejections are safe to reattempt after Slack's required delay. A failed threaded message emits a sanitized aggregate
+  warning without preventing later messages or changing Vitest's result.
 - Sends nothing when no Invoker Workflow was collected. A module that fails before any Invoker Case is collected has no Workflow identity and cannot be reported.
 
 The Slack app needs `chat:write`; it must be a member of private target channels. `runUrl`, when supplied, is rendered as a link to the CI run. Hard process termination cannot trigger `onTestRunEnd` and therefore cannot notify Slack.
@@ -425,7 +434,8 @@ Implementation changes:
 - `"."` and `"./slack"` exports with compiled ESM and declarations.
 - Publish only `dist`, `README.md`, and license material.
 - Reuse tsdown for `src/index.ts` and `src/slack.ts` entries, ESM output, and declarations.
-- Depend directly on `@slack/web-api` for the optional reporter implementation; do not add Bolt or a Slack abstraction layer.
+- Declare `@slack/web-api` as an optional peer and development dependency for the optional reporter implementation;
+  do not add Bolt or a Slack abstraction layer.
 - Require `vitest: ^4.1.10` as a peer dependency and a development dependency.
 - Reference Vitest directly rather than adding it to the workspace catalog.
 - Import runtime/types only from documented public `vitest` entry points; never depend directly on internal Vitest packages.

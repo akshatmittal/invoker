@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "@akshatmittal/invoker": "workspace:*",
+    "@slack/web-api": "^8.0.0",
     "@types/node": "catalog:",
     "@workspace/tsconfig": "workspace:*",
     "typescript": "catalog:",
