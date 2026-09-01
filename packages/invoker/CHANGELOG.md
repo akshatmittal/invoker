@@ -1,5 +1,17 @@
 # @akshatmittal/invoker
 
+## 0.3.0
+
+### Minor Changes
+
+- [`73c5ef1`](https://github.com/akshatmittal/invoker/commit/73c5ef1817f31f758fcb0b484926ae0756ce6be8) Thanks [@akshatmittal](https://github.com/akshatmittal)! - Make Task Matrix definitions async functions resolved during Vitest collection.
+
+### Patch Changes
+
+- [`149fafa`](https://github.com/akshatmittal/invoker/commit/149fafac11e9f08026cbc84dc13c6488086532f2) Thanks [@akshatmittal](https://github.com/akshatmittal)! - Combine every Slack workflow card and the elapsed footer into one summary message.
+
+- [`a9918c8`](https://github.com/akshatmittal/invoker/commit/a9918c881ebe12c1ea513bda0fc49d62642cc7c6) Thanks [@akshatmittal](https://github.com/akshatmittal)! - Keep every workflow summary page in the main Slack channel and reserve thread replies for failures, successful retries, and unhandled errors.
+
 ## 0.2.0
 
 ### Minor Changes
