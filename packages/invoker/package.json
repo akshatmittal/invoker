@@ -1,6 +1,6 @@
 {
   "name": "@akshatmittal/invoker",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Typed matrix-driven regression workflows for Vitest.",
   "keywords": [
     "matrix",
