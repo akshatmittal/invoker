@@ -4,6 +4,9 @@
       "path": "apps/example",
     },
     {
+      "path": "packages/anti-slop",
+    },
+    {
       "path": "packages/invoker",
     },
     {
