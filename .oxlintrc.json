@@ -20,10 +20,10 @@
     ".pi/**",
     ".roo/**",
     ".windsurf/**",
-    "tools/oxlint/anti-slop/**"
+    "packages/anti-slop/src/**"
   ],
   "plugins": ["typescript", "unicorn", "oxc", "react", "react-perf"],
-  "jsPlugins": [{ "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" }],
+  "jsPlugins": [{ "name": "anti-slop", "specifier": "@workspace/oxlint-anti-slop" }],
   "rules": {
     "anti-slop/no-chained-type-assertions": "error",
     "anti-slop/no-conditional-empty-object-spread": "error",

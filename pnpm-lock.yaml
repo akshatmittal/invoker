@@ -30,6 +30,9 @@ importers:
       '@oxlint/plugins':
         specifier: 1.78.0
         version: 1.78.0
+      '@workspace/oxlint-anti-slop':
+        specifier: workspace:*
+        version: link:packages/anti-slop
       oxfmt:
         specifier: ^0.63.0
         version: 0.63.0
@@ -63,6 +66,21 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@24.13.3)(vite@8.2.1(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/anti-slop:
+    devDependencies:
+      '@oxlint/plugins':
+        specifier: 1.78.0
+        version: 1.78.0
+      '@workspace/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(typescript@7.0.2)
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
 
   packages/invoker:
     dependencies:

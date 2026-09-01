@@ -10,8 +10,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "oxlint",
-    "lint:fix": "oxlint --fix --fix-suggestions --fix-dangerously",
+    "lint": "pnpm --filter @workspace/oxlint-anti-slop build && oxlint",
+    "lint:fix": "pnpm --filter @workspace/oxlint-anti-slop build && oxlint --fix --fix-suggestions --fix-dangerously",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "test": "turbo run test",
@@ -27,6 +27,7 @@
     "@changesets/cli": "^2.31.1",
     "@changesets/config": "^3.1.4",
     "@oxlint/plugins": "1.78.0",
+    "@workspace/oxlint-anti-slop": "workspace:*",
     "oxfmt": "^0.63.0",
     "oxlint": "^1.78.0",
     "taze": "^20.0.1",

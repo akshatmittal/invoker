@@ -47,6 +47,6 @@
     ".pi/**",
     ".roo/**",
     ".windsurf/**",
-    "tools/oxlint/anti-slop/**"
+    "packages/anti-slop/src/**"
   ]
 }
