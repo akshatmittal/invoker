@@ -357,13 +357,13 @@ The public options are only `token`, `channel`, and optional `runUrl`. The repor
 - Uses `@slack/web-api` with a bot token and channel ID; it does not support incoming webhooks.
 - Filters collected Vitest Cases by `meta.invoker` and derives Workflow and Task names from their registered suite hierarchy.
 - Posts one top-level `Invoker Report` message after the Vitest run. Additional status-colored Workflow cards are
-  threaded so each message remains within Slack's table row and character limits. Each card's headline contains
-  aggregate passed/total counts followed by Workflow metadata.
+  posted as top-level continuation messages so each message remains within Slack's table row and character limits.
+  Each card's headline contains aggregate passed/total counts followed by Workflow metadata.
 - Renders one native Slack table row per Task with final passed, retried, failed, and skipped Case counts plus the Task's Case execution duration. One shared footer contains the elapsed span from the first Case start to the final Case completion, a Slack-localized completion timestamp, and the optional run link.
 - Counts a Case in `retried` when its final Vitest diagnostic has a retry count greater than zero. Retried overlaps final status, so a successful retry is both passed and retried.
 - Uses a green status when all Cases pass without retries, yellow when Cases were retried, skipped, or left incomplete, and red when any Case or Workflow-level error remains failed.
-- Posts failure replies in the report thread. Each Workflow gets one red card reply per failed Task combining all of that Task's final failed Cases, with the Task failure count, Workflow metadata, Case name, matrix coordinate, and concise final error messages. Workflow-level errors get their own card. Unhandled Vitest errors are reported once at Run level. Split a group into numbered replies only when required by Slack's message length limits.
-- Escapes Slack markup in all names, matrices, and errors, and chunks failure details to Slack's message limits.
+- Posts detail replies in the report thread. Each Workflow gets one red card reply per failed Task combining all of that Task's final failed Cases, with the Task failure count, Workflow metadata, Case name, matrix coordinate, and concise final error messages. Successful retries get yellow replies with the prior errors retained by Vitest. Workflow-level errors get their own card. Unhandled Vitest errors are reported once at Run level. Split a group into numbered replies only when required by Slack's message length limits.
+- Escapes Slack markup in all names, matrices, and errors, and chunks report details to Slack's message limits.
 - Disables automatic retries because an uncertain `chat.postMessage` result could duplicate a message. Explicit rate-limit
   rejections are safe to reattempt after Slack's required delay. A failed threaded message emits a sanitized aggregate
   warning without preventing later messages or changing Vitest's result.

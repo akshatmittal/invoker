@@ -28,6 +28,14 @@ type Failure = {
   readonly messages: readonly string[];
 };
 
+type Retry = {
+  readonly task: string;
+  readonly caseName: string;
+  readonly matrix: JsonObject;
+  readonly count: number;
+  readonly messages: readonly string[];
+};
+
 export type TaskReport = {
   readonly name: string;
   readonly total: number;
@@ -44,6 +52,7 @@ export type WorkflowReport = {
   readonly metadata?: JsonObject;
   readonly tasks: readonly TaskReport[];
   readonly failures: readonly Failure[];
+  readonly retries: readonly Retry[];
   readonly startedAt?: number;
   readonly endedAt?: number;
 };
@@ -60,6 +69,7 @@ type MutableTaskReport = {
   startedAt?: number;
   endedAt?: number;
   readonly failures: Failure[];
+  readonly retries: Retry[];
 };
 
 type MutableWorkflowReport = {
@@ -116,6 +126,7 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
           skipped: 0,
           incomplete: 0,
           failures: [],
+          retries: [],
         };
         workflow.tasks.set(taskSuite, task);
       }
@@ -124,7 +135,19 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
       const result = testCase.result();
       const diagnostic = testCase.diagnostic();
       task[result.state === "pending" ? "incomplete" : result.state] += 1;
-      if ((diagnostic?.retryCount ?? 0) > 0) task.retried += 1;
+      const retryCount = diagnostic?.retryCount ?? 0;
+      if (retryCount > 0) {
+        task.retried += 1;
+        if (result.state === "passed") {
+          task.retries.push({
+            task: task.name,
+            caseName: testCase.name,
+            matrix: invoker.matrix,
+            count: retryCount,
+            messages: (result.errors ?? []).map(errorMessage),
+          });
+        }
+      }
 
       if (diagnostic) {
         task.startedAt = Math.min(task.startedAt ?? diagnostic.startTime, diagnostic.startTime);
@@ -144,12 +167,14 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
 
   return [...workflows.values()].map((workflow) => {
     const failures: Failure[] = [];
+    const retries: Retry[] = [];
     addErrors(failures, workflow.suite.errors());
     addErrors(failures, workflow.module.errors());
 
     const collectedTasks = [...workflow.tasks.values()];
     for (const task of collectedTasks) {
       failures.push(...task.failures);
+      retries.push(...task.retries);
       addErrors(failures, task.suite.errors(), task.name);
     }
 
@@ -158,11 +183,14 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
     return {
       name: workflow.name,
       metadata: workflow.metadata,
-      tasks: collectedTasks.map(({ suite: _suite, failures: _failures, startedAt, endedAt, ...task }) => ({
-        ...task,
-        duration: startedAt === undefined || endedAt === undefined ? 0 : endedAt - startedAt,
-      })),
+      tasks: collectedTasks.map(
+        ({ suite: _suite, failures: _failures, retries: _retries, startedAt, endedAt, ...task }) => ({
+          ...task,
+          duration: startedAt === undefined || endedAt === undefined ? 0 : endedAt - startedAt,
+        }),
+      ),
       failures: deduplicateFailures(failures),
+      retries,
       startedAt,
       endedAt,
     };
@@ -283,6 +311,53 @@ export function failureMessages(report: WorkflowReport) {
                 text: {
                   type: "mrkdwn" as const,
                   text: `🔴 *${title} — ${failures.length} failed${part}*`,
+                },
+              },
+              {
+                type: "context" as const,
+                elements: [{ type: "mrkdwn" as const, text: context }],
+              },
+              {
+                type: "section" as const,
+                text: { type: "mrkdwn" as const, text: details },
+              },
+            ],
+          },
+        ],
+      };
+    });
+  });
+}
+
+export function retryMessages(report: WorkflowReport) {
+  const groups = Map.groupBy(report.retries, (retry) => retry.task);
+
+  return [...groups].flatMap(([task, retries]) => {
+    const title = escapeSlack(truncate(task, NAME_CHARACTER_LIMIT));
+    const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
+    const metadata = metadataText(report.metadata);
+    const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+    const entries = retries.map((retry) => {
+      const matrix = `\nMatrix: ${escapeSlack(JSON.stringify(retry.matrix))}`;
+      const messages = retry.messages.map((message) => `\n• ${escapeSlack(message)}`).join("");
+      return `*${escapeSlack(retry.caseName)}*\nRetries: ${retry.count}${matrix}${messages}`;
+    });
+
+    return chunk(entries, SECTION_CHARACTER_LIMIT).map((details, index, messages) => {
+      const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
+      const summary = `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task, NAME_CHARACTER_LIMIT)} — ${retries.length} retried${part}`;
+
+      return {
+        text: summary,
+        attachments: [
+          {
+            color: "warning",
+            blocks: [
+              {
+                type: "section" as const,
+                text: {
+                  type: "mrkdwn" as const,
+                  text: `🟡 *${title} — ${retries.length} retried${part}*`,
                 },
               },
               {

@@ -4,7 +4,13 @@ import type { Reporter } from "vitest/reporters";
 import { WebAPIRateLimitedError, WebClient } from "@slack/web-api";
 import { setTimeout } from "node:timers/promises";
 
-import { collectWorkflowReports, failureMessages, summaryMessages, unhandledErrorMessages } from "./report.js";
+import {
+  collectWorkflowReports,
+  failureMessages,
+  retryMessages,
+  summaryMessages,
+  unhandledErrorMessages,
+} from "./report.js";
 
 export type SlackReporterOptions = {
   readonly token: string;
@@ -51,9 +57,23 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
         return;
       }
 
+      let failedMessages = 0;
+      for (const continuation of continuations) {
+        try {
+          await postMessage({
+            channel: options.channel,
+            ...continuation,
+            mrkdwn: false,
+            unfurl_links: false,
+          });
+        } catch {
+          failedMessages += 1;
+        }
+      }
+
       const replies = [
-        ...continuations,
         ...reports.flatMap(failureMessages),
+        ...reports.flatMap(retryMessages),
         ...unhandledErrorMessages(unhandledErrors),
       ];
       if (replies.length > 0 && !parentTimestamp) {
@@ -61,7 +81,6 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
         return;
       }
 
-      let failedMessages = 0;
       for (const reply of replies) {
         try {
           await postMessage({
