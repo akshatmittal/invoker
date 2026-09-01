@@ -356,9 +356,9 @@ The public options are only `token`, `channel`, and optional `runUrl`. The repor
 
 - Uses `@slack/web-api` with a bot token and channel ID; it does not support incoming webhooks.
 - Filters collected Vitest Cases by `meta.invoker` and derives Workflow and Task names from their registered suite hierarchy.
-- Posts one top-level `Invoker Report` message after the Vitest run. Additional status-colored Workflow cards are
-  posted as top-level continuation messages so each message remains within Slack's table row and character limits.
-  Each card's headline contains aggregate passed/total counts followed by Workflow metadata.
+- Posts one top-level `Invoker Report` message after the Vitest run containing every status-colored Workflow card.
+  Each card's headline contains aggregate passed/total counts followed by Workflow metadata, and the shared elapsed
+  footer appears after the final card.
 - Renders one native Slack table row per Task with final passed, retried, failed, and skipped Case counts plus the Task's Case execution duration. One shared footer contains the elapsed span from the first Case start to the final Case completion, a Slack-localized completion timestamp, and the optional run link.
 - Counts a Case in `retried` when its final Vitest diagnostic has a retry count greater than zero. Retried overlaps final status, so a successful retry is both passed and retried.
 - Uses a green status when all Cases pass without retries, yellow when Cases were retried, skipped, or left incomplete, and red when any Case or Workflow-level error remains failed.

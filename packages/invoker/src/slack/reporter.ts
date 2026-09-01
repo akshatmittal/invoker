@@ -8,7 +8,7 @@ import {
   collectWorkflowReports,
   failureMessages,
   retryMessages,
-  summaryMessages,
+  summaryMessage,
   unhandledErrorMessages,
 } from "./report.js";
 
@@ -39,8 +39,7 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
       const reports = collectWorkflowReports(modules);
       if (reports.length === 0) return;
 
-      const [parentMessage, ...continuations] = summaryMessages(reports, options.runUrl);
-      if (!parentMessage) return;
+      const parentMessage = summaryMessage(reports, options.runUrl);
 
       let parentTimestamp: string | undefined;
       try {
@@ -57,20 +56,6 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
         return;
       }
 
-      let failedMessages = 0;
-      for (const continuation of continuations) {
-        try {
-          await postMessage({
-            channel: options.channel,
-            ...continuation,
-            mrkdwn: false,
-            unfurl_links: false,
-          });
-        } catch {
-          failedMessages += 1;
-        }
-      }
-
       const replies = [
         ...reports.flatMap(failureMessages),
         ...reports.flatMap(retryMessages),
@@ -81,6 +66,7 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
         return;
       }
 
+      let failedMessages = 0;
       for (const reply of replies) {
         try {
           await postMessage({

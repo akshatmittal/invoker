@@ -197,7 +197,7 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
   });
 }
 
-export function summaryMessages(reports: readonly WorkflowReport[], runUrl?: string) {
+export function summaryMessage(reports: readonly WorkflowReport[], runUrl?: string) {
   const timestamp = Math.floor(Date.now() / 1_000);
   const { startedAt, endedAt } = timeSpan(reports);
   const duration = startedAt === undefined || endedAt === undefined ? 0 : endedAt - startedAt;
@@ -208,24 +208,20 @@ export function summaryMessages(reports: readonly WorkflowReport[], runUrl?: str
   ].join(" • ");
   const attachments = reports.flatMap(workflowAttachments);
 
-  return attachments.map((attachment, index) => ({
-    text: index === 0 ? "Invoker Report" : "Invoker Report (continued)",
+  return {
+    text: "Invoker Report",
     attachments: [
-      attachment,
-      ...(index === 0
-        ? [
-            {
-              blocks: [
-                {
-                  type: "context" as const,
-                  elements: [{ type: "mrkdwn" as const, text: footer }],
-                },
-              ],
-            },
-          ]
-        : []),
+      ...attachments,
+      {
+        blocks: [
+          {
+            type: "context" as const,
+            elements: [{ type: "mrkdwn" as const, text: footer }],
+          },
+        ],
+      },
     ],
-  }));
+  };
 }
 
 function workflowAttachments(report: WorkflowReport) {
