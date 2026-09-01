@@ -1,5 +1,11 @@
 # @akshatmittal/invoker
 
+## 0.3.1
+
+### Patch Changes
+
+- [`40efeb4`](https://github.com/akshatmittal/invoker/commit/40efeb4cd5ab66c58dfc0dd740c6487d26ba60d4) Thanks [@akshatmittal](https://github.com/akshatmittal)! - Include skipped Case reasons in Slack report threads.
+
 ## 0.3.0
 
 ### Minor Changes
