@@ -362,7 +362,7 @@ The public options are only `token`, `channel`, and optional `runUrl`. The repor
 - Renders one native Slack table row per Task with final passed, retried, failed, and skipped Case counts plus the Task's Case execution duration. One shared footer contains the elapsed span from the first Case start to the final Case completion, a Slack-localized completion timestamp, and the optional run link.
 - Counts a Case in `retried` when its final Vitest diagnostic has a retry count greater than zero. Retried overlaps final status, so a successful retry is both passed and retried.
 - Uses a green status when all Cases pass without retries, yellow when Cases were retried, skipped, or left incomplete, and red when any Case or Workflow-level error remains failed.
-- Posts detail replies in the report thread. Each Workflow gets one red card reply per failed Task combining all of that Task's final failed Cases, with the Task failure count, Workflow metadata, Case name, matrix coordinate, and concise final error messages. Successful retries get yellow replies with the prior errors retained by Vitest. Workflow-level errors get their own card. Unhandled Vitest errors are reported once at Run level. Split a group into numbered replies only when required by Slack's message length limits.
+- Posts detail replies in the report thread. Each Workflow gets one red card reply per failed Task combining all of that Task's final failed Cases, with the Task failure count, Workflow metadata, Case name, matrix coordinate, and concise final error messages. Successful retries get yellow replies with the prior errors retained by Vitest, and skipped Cases get yellow replies with their `vitest.skip` reason. Workflow-level errors get their own card. Unhandled Vitest errors are reported once at Run level. Split a group into numbered replies only when required by Slack's message length limits.
 - Escapes Slack markup in all names, matrices, and errors, and chunks report details to Slack's message limits.
 - Disables automatic retries because an uncertain `chat.postMessage` result could duplicate a message. Explicit rate-limit
   rejections are safe to reattempt after Slack's required delay. A failed threaded message emits a sanitized aggregate
@@ -466,7 +466,7 @@ Add any of these only when a concrete regression suite demonstrates that Vitest'
 7. Implement `defineWorkflow` boundary validation and Vitest registration, setup, retries-safe Output capture, and teardown.
 8. Add the README usage, Vitest configuration, filtering, GitHub Actions artifact guidance, and explicit v1 limits.
 9. Build declarations and inspect the npm tarball contents.
-10. Add the optional Slack reporter subpath, Workflow/Task aggregation, threaded failure delivery, README usage, and example configuration.
+10. Add the optional Slack reporter subpath, Workflow/Task aggregation, threaded detail delivery, README usage, and example configuration.
 
 Repository instructions prohibit creating tests. Handoff verification is therefore limited to existing static/build/package checks:
 

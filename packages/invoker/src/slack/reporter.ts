@@ -8,6 +8,7 @@ import {
   collectWorkflowReports,
   failureMessages,
   retryMessages,
+  skipMessages,
   summaryMessage,
   unhandledErrorMessages,
 } from "./report.js";
@@ -59,6 +60,7 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
       const replies = [
         ...reports.flatMap(failureMessages),
         ...reports.flatMap(retryMessages),
+        ...reports.flatMap(skipMessages),
         ...unhandledErrorMessages(unhandledErrors),
       ];
       if (replies.length > 0 && !parentTimestamp) {

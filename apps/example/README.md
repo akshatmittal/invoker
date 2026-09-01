@@ -31,7 +31,8 @@ pnpm --filter @workspace/invoker-example test -- -t score-models
 ```
 
 Set `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID` to also post one combined Slack
-report with a card per Workflow and threaded failure details.
+report with a card per Workflow and threaded failure, retry, skip, and unhandled
+error details.
 
 Set `INVOKER_EXAMPLE_FAILURE=true` to make the candidate Cases fail and exercise
 the grouped Slack replies.

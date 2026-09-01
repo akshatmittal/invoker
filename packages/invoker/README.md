@@ -196,16 +196,14 @@ retries.
 ## Notify Slack
 
 Invoker's optional Slack reporter posts one `Invoker Report` parent message per
-Vitest run. It places additional Workflow cards in the message thread so every
-Task table remains within Slack's row and character limits. Each card includes
-aggregate results, Workflow metadata, and a table of Task counts and durations.
-A shared footer contains the elapsed span from the first Case start to the final
-Case completion, a localized timestamp, and the optional run link. Final
-failures are posted in the same thread with one reply per failed Task in each
-Workflow. Unhandled run errors are reported once. Delivery failures are
-isolated to the affected reply. Ambiguous transport failures are not retried;
-an explicit Slack rate-limit rejection is reattempted only after its required
-delay.
+Vitest run containing every Workflow card. Each card includes aggregate results,
+Workflow metadata, and a table of Task counts and durations. A shared footer
+contains the elapsed span from the first Case start to the final Case completion,
+a localized timestamp, and the optional run link. Final failures, successful
+retry details, skipped Case reasons, and unhandled run errors are posted in the
+same thread. Delivery failures are isolated to the affected reply. Ambiguous
+transport failures are not retried; an explicit Slack rate-limit rejection is
+reattempted only after its required delay.
 
 ```ts
 import { slackReporter } from "@akshatmittal/invoker/slack";

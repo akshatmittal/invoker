@@ -36,6 +36,13 @@ type Retry = {
   readonly messages: readonly string[];
 };
 
+type Skip = {
+  readonly task: string;
+  readonly caseName: string;
+  readonly matrix: JsonObject;
+  readonly reason: string;
+};
+
 export type TaskReport = {
   readonly name: string;
   readonly total: number;
@@ -53,6 +60,7 @@ export type WorkflowReport = {
   readonly tasks: readonly TaskReport[];
   readonly failures: readonly Failure[];
   readonly retries: readonly Retry[];
+  readonly skips: readonly Skip[];
   readonly startedAt?: number;
   readonly endedAt?: number;
 };
@@ -70,6 +78,7 @@ type MutableTaskReport = {
   endedAt?: number;
   readonly failures: Failure[];
   readonly retries: Retry[];
+  readonly skips: Skip[];
 };
 
 type MutableWorkflowReport = {
@@ -127,6 +136,7 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
           incomplete: 0,
           failures: [],
           retries: [],
+          skips: [],
         };
         workflow.tasks.set(taskSuite, task);
       }
@@ -161,6 +171,13 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
           matrix: invoker.matrix,
           messages: result.errors.map(errorMessage),
         });
+      } else if (result.state === "skipped") {
+        task.skips.push({
+          task: task.name,
+          caseName: testCase.name,
+          matrix: invoker.matrix,
+          reason: result.note || "No reason provided",
+        });
       }
     }
   }
@@ -168,6 +185,7 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
   return [...workflows.values()].map((workflow) => {
     const failures: Failure[] = [];
     const retries: Retry[] = [];
+    const skips: Skip[] = [];
     addErrors(failures, workflow.suite.errors());
     addErrors(failures, workflow.module.errors());
 
@@ -175,6 +193,7 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
     for (const task of collectedTasks) {
       failures.push(...task.failures);
       retries.push(...task.retries);
+      skips.push(...task.skips);
       addErrors(failures, task.suite.errors(), task.name);
     }
 
@@ -184,13 +203,14 @@ export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): Work
       name: workflow.name,
       metadata: workflow.metadata,
       tasks: collectedTasks.map(
-        ({ suite: _suite, failures: _failures, retries: _retries, startedAt, endedAt, ...task }) => ({
+        ({ suite: _suite, failures: _failures, retries: _retries, skips: _skips, startedAt, endedAt, ...task }) => ({
           ...task,
           duration: startedAt === undefined || endedAt === undefined ? 0 : endedAt - startedAt,
         }),
       ),
       failures: deduplicateFailures(failures),
       retries,
+      skips,
       startedAt,
       endedAt,
     };
@@ -354,6 +374,52 @@ export function retryMessages(report: WorkflowReport) {
                 text: {
                   type: "mrkdwn" as const,
                   text: `🟡 *${title} — ${retries.length} retried${part}*`,
+                },
+              },
+              {
+                type: "context" as const,
+                elements: [{ type: "mrkdwn" as const, text: context }],
+              },
+              {
+                type: "section" as const,
+                text: { type: "mrkdwn" as const, text: details },
+              },
+            ],
+          },
+        ],
+      };
+    });
+  });
+}
+
+export function skipMessages(report: WorkflowReport) {
+  const groups = Map.groupBy(report.skips, (skip) => skip.task);
+
+  return [...groups].flatMap(([task, skips]) => {
+    const title = escapeSlack(truncate(task, NAME_CHARACTER_LIMIT));
+    const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
+    const metadata = metadataText(report.metadata);
+    const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+    const entries = skips.map((skip) => {
+      const matrix = `\nMatrix: ${escapeSlack(JSON.stringify(skip.matrix))}`;
+      return `*${escapeSlack(skip.caseName)}*${matrix}\nReason: ${escapeSlack(skip.reason)}`;
+    });
+
+    return chunk(entries, SECTION_CHARACTER_LIMIT).map((details, index, messages) => {
+      const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
+      const summary = `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task, NAME_CHARACTER_LIMIT)} — ${skips.length} skipped${part}`;
+
+      return {
+        text: summary,
+        attachments: [
+          {
+            color: "warning",
+            blocks: [
+              {
+                type: "section" as const,
+                text: {
+                  type: "mrkdwn" as const,
+                  text: `🟡 *${title} — ${skips.length} skipped${part}*`,
                 },
               },
               {
