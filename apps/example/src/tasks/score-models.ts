@@ -2,10 +2,10 @@ import { defineTask } from "@akshatmittal/invoker";
 
 export const scoreModels = defineTask({
   name: "score-models",
-  matrix: {
+  matrix: async () => ({
     model: ["baseline", "candidate"],
     dataset: ["support", "sales"],
-  },
+  }),
   setup: ({ cases }) => ({
     caseCount: cases.length,
     scores: new Map([

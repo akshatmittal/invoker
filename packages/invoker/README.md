@@ -104,10 +104,10 @@ import { defineTask } from "@akshatmittal/invoker";
 
 export const evaluateModels = defineTask({
   name: "evaluate-models",
-  matrix: {
+  matrix: async () => ({
     model: ["gpt-5", "gpt-5-mini"],
     dataset: ["support", "sales"],
-  },
+  }),
   setup: async ({ cases }) => loadFixtures(cases),
   run: async ({ matrix, setup, vitest }) => {
     vitest.expect(setup.has(matrix.dataset)).toBe(true);
@@ -139,7 +139,8 @@ defineWorkflow({
 });
 ```
 
-Matrix literals determine the exact `matrix` type, `setup` determines the exact
+The Matrix function runs during collection and its returned literal determines the exact
+`matrix` type. `setup` determines the exact
 shared setup type, and the exact JSON return type is retained on the Task.
 Axis names must be non-empty, enumerable strings that are not array indexes.
 Omitting `matrix` creates one Case with `{}`. Setup runs once per Task, Cases

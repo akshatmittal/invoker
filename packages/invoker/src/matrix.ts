@@ -6,11 +6,7 @@ import { assertPlainObject, canonicalJson, fail, snapshotJson } from "./json.js"
 
 const axisSchema = z.string();
 
-export function expandMatrix(matrix: Matrix | undefined, owner: string): readonly JsonObject[] {
-  if (matrix === undefined) {
-    return [{}];
-  }
-
+export function expandMatrix(matrix: Matrix, owner: string): readonly JsonObject[] {
   assertPlainObject(matrix, owner, ".matrix");
   let cases: JsonObject[] = [{}];
 

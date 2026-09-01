@@ -67,7 +67,7 @@ Without setup:
 ```ts
 defineTask({
   name: "health-check",
-  matrix: { region: ["us", "eu"] },
+  matrix: async () => ({ region: ["us", "eu"] }),
   run: ({ matrix, setup, vitest }) => {
     // matrix: { readonly region: "us" | "eu" }
     // setup: undefined
@@ -82,10 +82,10 @@ With setup and optional teardown:
 ```ts
 export const evaluateModels = defineTask({
   name: "evaluate-models",
-  matrix: {
+  matrix: async () => ({
     model: ["gpt-5", "gpt-5-mini"],
     dataset: ["support", "sales"],
-  },
+  }),
   setup: async ({ cases }) => loadFixtures(cases),
   run: async ({ matrix, setup, vitest }) => {
     vitest.expect(setup.has(matrix.dataset)).toBe(true);
@@ -105,7 +105,7 @@ export const evaluateModels = defineTask({
 Contract:
 
 - `name` is a non-empty string literal preserved verbatim.
-- `matrix` is optional and synchronously known during collection.
+- `matrix` is an optional async function whose returned Matrix is resolved during collection.
 - `setup`, `run`, and `teardown` may return synchronously or asynchronously.
 - `teardown` is illegal without `setup` at compile time and runtime.
 - `setup({ cases })` receives the complete expanded readonly coordinate array.
@@ -114,7 +114,7 @@ Contract:
 - `run` must return a non-`undefined` `JsonValue`; its exact awaited Output type is inferred.
 - The returned definition is readonly. Runtime deep-freezing is not required; mutation is unsupported.
 
-Matrix literals determine the exact coordinate type, setup determines its exact shared value type, and both flow into `run`, whose exact Output is retained on the Task definition. Authors normally supply no generics.
+The Matrix function's returned literal determines the exact coordinate type, setup determines its exact shared value type, and both flow into `run`, whose exact Output is retained on the Task definition. Authors normally supply no generics.
 
 ### `defineWorkflow`
 
@@ -136,8 +136,8 @@ Contract:
 - `metadata`, when present, is an exact `JsonObject` used only for reporting.
 - `tasks` is a non-empty readonly tuple of `TaskDefinition`s with unique non-empty names.
 - Preserve the heterogeneous Task tuple, literal names, metadata shape, matrices, setup values, and Outputs through const-generic inference.
-- Validate the entire Workflow boundary before registering any Vitest suite.
-- Synchronously register the Vitest hierarchy and return `void`.
+- Resolve and validate the entire Workflow boundary during collection before registering any Task suite.
+- Register the Workflow through an async Vitest suite factory and return `void`.
 - Do not accept concurrency, timeout, retry, reporter, worker, persistence, or other Vitest options.
 - Do not pass Workflow metadata into Task callbacks. A Task needing configuration closes over it when defined.
 - Permit a Task definition to be reused in multiple Workflows.
@@ -181,10 +181,10 @@ One command is one Vitest invocation inside one CI job. Vitest may use its norma
 V1 accepts axes only:
 
 ```ts
-matrix: {
+matrix: async () => ({
   model: ["gpt-5", "gpt-5-mini"],
   dataset: ["support", "sales"],
-}
+});
 ```
 
 Rules:
@@ -193,7 +193,7 @@ Rules:
 - Each axis name is a non-empty, enumerable string that is not an array index, and each value is a non-empty
   readonly array of JSON values.
 - Structured JSON objects may be axis values, allowing correlated parameters on one axis.
-- There is no explicit-Case mode and no `include`, `exclude`, asynchronous discovery, custom naming callback, or Case-count ceiling.
+- There is no explicit-Case mode and no `include`, `exclude`, custom naming callback, or Case-count ceiling.
 - Expansion is the Cartesian product.
 - Preserve axis object insertion order and value array order.
 - The first axis changes slowest; the last changes fastest.
@@ -223,10 +223,10 @@ A matrixless Case is named `[1]`.
 
 ## Vitest registration algorithm
 
-`defineWorkflow` performs these steps synchronously:
+`defineWorkflow` registers an async Vitest collection suite and returns `void`. That suite performs these steps:
 
 1. Validate the Workflow name and metadata.
-2. Validate every Task definition, enforce unique Task names, expand every matrix, and construct every Case name and static metadata. Do not partially register an invalid Workflow.
+2. Validate every Task definition, enforce unique Task names, await every Matrix function, expand every returned Matrix, and construct every Case name and static metadata before registering Task suites.
 3. Register `describe(workflow.name, { concurrent: false }, ...)`.
 4. In Task tuple order, register one `describe(task.name, { concurrent: false }, ...)` per Task.
 5. Inside each Task suite, keep a shared setup value.
@@ -272,7 +272,7 @@ Reject with the owning Workflow or Task and exact property path:
 - Non-enumerable, symbol, or array-index matrix axes; non-array axes; empty axis arrays; empty/whitespace-only
   names; and duplicate coordinates.
 
-Matrix values, Workflow metadata, and Task definitions are snapshotted before registration so later caller mutation has
+Returned Matrix values, Workflow metadata, and Task definitions are snapshotted before Task registration so later caller mutation has
 no effect. Output validation occurs after `run` resolves and fails that Case through an ordinary thrown validation
 error.
 

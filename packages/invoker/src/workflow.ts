@@ -28,19 +28,14 @@ type PreparedTask = {
   readonly metadata: readonly RuntimeInvokerMeta[];
 };
 
-type PreparedWorkflow = {
-  readonly name: string;
-  readonly tasks: readonly PreparedTask[];
-};
-
 export function defineWorkflow<
   const Tasks extends readonly [AnyTaskDefinition, ...AnyTaskDefinition[]],
   const Metadata extends JsonObject = JsonObject,
 >(definition: WorkflowDefinition<Tasks, Metadata>): void {
-  const workflow = prepareWorkflow(definition);
+  describe(definition.name, { concurrent: false }, async () => {
+    const tasks = await prepareWorkflow(definition);
 
-  describe(workflow.name, { concurrent: false }, () => {
-    for (const prepared of workflow.tasks) {
+    for (const prepared of tasks) {
       describe(prepared.task.name, { concurrent: false }, () => {
         let setup: unknown;
 
@@ -81,9 +76,9 @@ export function defineWorkflow<
   });
 }
 
-function prepareWorkflow(
+async function prepareWorkflow(
   definition: WorkflowDefinition<readonly [AnyTaskDefinition, ...AnyTaskDefinition[]], JsonObject>,
-): PreparedWorkflow {
+): Promise<readonly PreparedTask[]> {
   assertPlainObject(definition, "Workflow", "");
   assertOnlyKeys(definition, ["name", "metadata", "tasks"], "Workflow");
   const { name, metadata: workflowMetadata, tasks: taskDefinitions } = definition;
@@ -124,6 +119,9 @@ function prepareWorkflow(
     if (!z.function().safeParse(taskSnapshot.run).success) {
       fail(owner, ".run", "expected a function");
     }
+    if (!z.function().safeParse(taskSnapshot.matrix).success) {
+      fail(owner, ".matrix", "expected a function");
+    }
     if (taskSnapshot.setup !== undefined && !z.function().safeParse(taskSnapshot.setup).success) {
       fail(owner, ".setup", "expected a function");
     }
@@ -134,16 +132,22 @@ function prepareWorkflow(
       fail(owner, ".teardown", "requires setup");
     }
 
-    const cases = expandMatrix(taskSnapshot.matrix, `Task ${JSON.stringify(taskSnapshot.name)}`);
-    return {
-      task: taskSnapshot,
-      cases,
-      names: cases.map(caseName),
-      metadata: cases.map((matrix) =>
-        metadata === undefined ? { schema: 1, matrix } : { schema: 1, matrix, metadata },
-      ),
-    } satisfies PreparedTask;
+    return taskSnapshot;
   });
 
-  return { name, tasks };
+  const preparedTasks = await Promise.all(
+    tasks.map(async (task) => {
+      const cases = expandMatrix(await task.matrix(), `Task ${JSON.stringify(task.name)}`);
+      return {
+        task,
+        cases,
+        names: cases.map(caseName),
+        metadata: cases.map((matrix) =>
+          metadata === undefined ? { schema: 1, matrix } : { schema: 1, matrix, metadata },
+        ),
+      } satisfies PreparedTask;
+    }),
+  );
+
+  return preparedTasks;
 }

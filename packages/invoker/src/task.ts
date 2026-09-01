@@ -18,7 +18,7 @@ export interface TaskDefinition<
   Output extends JsonValue = JsonValue,
 > {
   readonly name: Name;
-  readonly matrix: M;
+  readonly matrix: () => Promise<M>;
   readonly [taskDefinitionBrand]: true;
   readonly setup?: (context: SetupContext<M>) => Awaitable<Setup>;
   readonly run: (context: TaskContext<CaseCoordinates<M>, Setup>) => Awaitable<Output>;
@@ -27,7 +27,7 @@ export interface TaskDefinition<
 
 type TaskWithSetup<Name extends string, M extends Matrix, Setup, Output extends JsonValue> = {
   readonly name: Name;
-  readonly matrix?: M;
+  readonly matrix?: () => Promise<M>;
   readonly setup: (context: SetupContext<M>) => Awaitable<Setup>;
   readonly run: (context: TaskContext<CaseCoordinates<M>, Setup>) => Awaitable<Output>;
   readonly teardown?: (context: TeardownContext<M, Setup>) => Awaitable<void>;
@@ -35,7 +35,7 @@ type TaskWithSetup<Name extends string, M extends Matrix, Setup, Output extends 
 
 type TaskWithoutSetup<Name extends string, M extends Matrix, Output extends JsonValue> = {
   readonly name: Name;
-  readonly matrix?: M;
+  readonly matrix?: () => Promise<M>;
   readonly setup?: never;
   readonly run: (context: TaskContext<CaseCoordinates<M>, undefined>) => Awaitable<Output>;
   readonly teardown?: never;
@@ -59,20 +59,20 @@ export function defineTask<const Name extends string, const M extends Matrix, Se
 ) {
   return {
     ...definition,
-    matrix: definition.matrix ?? {},
+    matrix: definition.matrix ?? (async () => ({})),
     [taskDefinitionBrand]: true as const,
   };
 }
 
 export type AnyTaskDefinition = {
   readonly name: string;
-  readonly matrix: Matrix;
+  readonly matrix: () => Promise<Matrix>;
   readonly [taskDefinitionBrand]: true;
 };
 
 export type RuntimeTask = {
   readonly name: string;
-  readonly matrix?: Matrix;
+  readonly matrix: () => Promise<Matrix>;
   readonly setup?: (context: SetupContext<Matrix>) => Awaitable<unknown>;
   readonly run: (context: TaskContext<JsonObject, unknown>) => Awaitable<JsonValue>;
   readonly teardown?: (context: TeardownContext<Matrix, unknown>) => Awaitable<void>;
