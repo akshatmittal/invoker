@@ -1,6 +1,11 @@
 import { defineTask } from "@akshatmittal/invoker";
 
-export const scoreModels = defineTask({
+type ScoreParams = {
+  environment: "staging" | "production";
+  baseline: string;
+};
+
+export const scoreModels = defineTask<ScoreParams>()({
   name: "score-models",
   matrix: async () => ({
     model: ["baseline", "candidate"],
@@ -15,7 +20,7 @@ export const scoreModels = defineTask({
       ["candidate:sales", 0.86],
     ]),
   }),
-  run: ({ matrix, setup, vitest }) => {
+  run: ({ params, matrix, setup, vitest }) => {
     const score = setup.scores.get(`${matrix.model}:${matrix.dataset}`)!;
     const threshold = matrix.dataset === "support" ? 0.8 : 0.75;
 
@@ -26,6 +31,8 @@ export const scoreModels = defineTask({
     vitest.expect(score).toBeGreaterThanOrEqual(threshold);
 
     return {
+      environment: params.environment,
+      baseline: params.baseline,
       model: matrix.model,
       dataset: matrix.dataset,
       score,

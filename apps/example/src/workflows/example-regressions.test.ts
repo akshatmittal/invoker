@@ -8,5 +8,6 @@ defineWorkflow({
     commit: process.env.GITHUB_SHA ?? "local",
     runner: process.env.GITHUB_ACTIONS === "true" ? "gha" : "local",
   },
-  tasks: [scoreModels],
+  matrix: async () => ({ environment: ["staging", "production"] }),
+  tasks: ({ matrix }) => [scoreModels({ environment: matrix.environment, baseline: "2026-09-01" })],
 });
