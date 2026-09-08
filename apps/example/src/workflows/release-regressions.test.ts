@@ -9,5 +9,5 @@ defineWorkflow({
     runner: process.env.GITHUB_ACTIONS === "true" ? "github-actions" : "local",
     release: "candidate",
   },
-  tasks: [scoreModels],
+  tasks: () => [scoreModels({ environment: "production", baseline: "2026-08-01" })],
 });

@@ -1,153 +1,180 @@
 import type { TaskMeta } from "vitest";
 
-import { beforeAll, describe, test } from "vitest";
+import { beforeAll, describe, test, TestRunner } from "vitest";
 import { z } from "zod";
 
-import type { AnyTaskDefinition, RuntimeTask } from "./task.js";
-import type { InvokerMeta, JsonObject, JsonValue } from "./types.js";
+import type { AnyTaskBinding, RuntimeTask } from "./task.js";
+import type { CaseCoordinates, InvokerMeta, JsonObject, JsonValue, Matrix } from "./types.js";
 
+import { errorWithContext } from "./errors.js";
 import { assertName, assertOnlyKeys, assertPlainObject, fail, snapshotJson } from "./json.js";
 import { caseName, expandMatrix } from "./matrix.js";
-import { taskDefinitionBrand } from "./task.js";
+import { taskBindingBrand } from "./task.js";
 
-type WorkflowDefinition<
-  Tasks extends readonly [AnyTaskDefinition, ...AnyTaskDefinition[]],
-  Metadata extends JsonObject,
-> = {
+const functionSchema = z.function();
+
+type WorkflowDefinition<M extends Matrix, Metadata extends JsonObject> = {
   readonly name: string;
   readonly metadata?: Metadata;
-  readonly tasks: Tasks;
+  readonly matrix?: () => Promise<M>;
+  readonly tasks: (context: { readonly matrix: CaseCoordinates<M> }) => readonly [AnyTaskBinding, ...AnyTaskBinding[]];
 };
 
-type RuntimeInvokerMeta = InvokerMeta<JsonObject, JsonValue, JsonObject>;
+type WorkflowInfo = {
+  readonly name: string;
+  metadata?: JsonObject;
+};
+
+type RuntimeInvokerMeta = InvokerMeta<JsonObject, JsonValue>;
 
 type PreparedTask = {
   readonly task: RuntimeTask;
   readonly cases: readonly JsonObject[];
-  readonly names: readonly string[];
-  readonly metadata: readonly RuntimeInvokerMeta[];
 };
 
 export function defineWorkflow<
-  const Tasks extends readonly [AnyTaskDefinition, ...AnyTaskDefinition[]],
+  const M extends Matrix = Record<never, never>,
   const Metadata extends JsonObject = JsonObject,
->(definition: WorkflowDefinition<Tasks, Metadata>): void {
-  describe(definition.name, { concurrent: false }, async () => {
-    const tasks = await prepareWorkflow(definition);
+>(definition: WorkflowDefinition<M, Metadata>): void {
+  const info: WorkflowInfo = { name: definition.name };
+  // SAFETY: Invoker owns this serializable suite metadata, consumed by its reporter.
+  const meta = { invokerWorkflow: info } as TaskMeta;
 
-    for (const prepared of tasks) {
-      describe(prepared.task.name, { concurrent: false }, () => {
-        let setup: unknown;
+  describe(definition.name, { concurrent: false, shuffle: false, meta }, async () => {
+    const file = TestRunner.getCurrentSuite().file;
+    try {
+      const coordinates = await prepareWorkflow(definition, info);
+      for (const [index, coordinate] of coordinates.entries()) {
+        // SAFETY: Clear the inherited Workflow marker on coordinate and Task suites.
+        const coordinateMeta = { invokerWorkflow: null } as TaskMeta;
+        describe(caseName(coordinate.matrix, index), { concurrent: false, meta: coordinateMeta }, () => {
+          for (const prepared of coordinate.tasks) {
+            registerTask(prepared, coordinate.matrix, info.metadata);
+          }
+        });
+      }
+    } catch (cause) {
+      // Vitest drops suites when collection throws. File metadata retains the failed Workflow's identity.
+      Object.assign(file.meta, { invokerCollectionError: info });
+      throw errorWithContext(`Workflow ${JSON.stringify(info.name)} collection failed`, cause);
+    }
+  });
+}
 
-        const setupTask = prepared.task.setup;
-        if (setupTask) {
-          beforeAll(async () => {
-            setup = await setupTask({ cases: prepared.cases });
-
-            const teardownTask = prepared.task.teardown;
-            if (teardownTask) {
-              return () => teardownTask({ cases: prepared.cases, setup });
-            }
-          });
+function registerTask(prepared: PreparedTask, workflow: JsonObject, metadata: JsonObject | undefined): void {
+  const { task, cases } = prepared;
+  const { params } = task;
+  describe(task.name, { concurrent: false }, () => {
+    let setup: unknown;
+    const setupTask = task.setup;
+    if (setupTask) {
+      beforeAll(async () => {
+        setup = await setupTask({ params, cases });
+        const teardownTask = task.teardown;
+        if (teardownTask) {
+          return () => teardownTask({ params, cases, setup });
         }
+      });
+    }
 
-        for (const [index, matrix] of prepared.cases.entries()) {
-          const name = prepared.names[index]!;
-          const invoker = prepared.metadata[index]!;
-
-          // SAFETY: Invoker writes this metadata and Vitest preserves it on the matching task.
-          test.concurrent(name, { meta: { invoker } as TaskMeta }, async (vitest) => {
-            // SAFETY: This callback belongs to the task registered with Invoker metadata above.
-            const meta = vitest.task.meta as TaskMeta & {
-              invoker: RuntimeInvokerMeta;
-            };
-
-            delete meta.invoker.output;
-            const output = await prepared.task.run({
-              matrix,
-              setup,
-              vitest,
-            });
-            meta.invoker.output = snapshotJson(output, `Task ${JSON.stringify(prepared.task.name)}`, ".output");
-          });
-        }
+    for (const [index, matrix] of cases.entries()) {
+      const invoker: RuntimeInvokerMeta = {
+        schema: 2,
+        matrix: { workflow, task: matrix },
+        params,
+      };
+      if (metadata !== undefined) invoker.metadata = metadata;
+      // SAFETY: Invoker writes this metadata and Vitest preserves it on the matching Case.
+      test.concurrent(caseName(matrix, index), { meta: { invoker } as TaskMeta }, async (vitest) => {
+        // SAFETY: This callback belongs to the Case registered with Invoker metadata above.
+        const meta = vitest.task.meta as TaskMeta & { invoker: RuntimeInvokerMeta };
+        delete meta.invoker.output;
+        const output = await task.run({ params, matrix, setup, vitest });
+        meta.invoker.output = snapshotJson(output, `Task ${JSON.stringify(task.name)}`, ".output");
       });
     }
   });
 }
 
-async function prepareWorkflow(
-  definition: WorkflowDefinition<readonly [AnyTaskDefinition, ...AnyTaskDefinition[]], JsonObject>,
-): Promise<readonly PreparedTask[]> {
+async function prepareWorkflow<M extends Matrix>(definition: WorkflowDefinition<M, JsonObject>, info: WorkflowInfo) {
   assertPlainObject(definition, "Workflow", "");
-  assertOnlyKeys(definition, ["name", "metadata", "tasks"], "Workflow");
-  const { name, metadata: workflowMetadata, tasks: taskDefinitions } = definition;
-  assertName(name, "Workflow", ".name");
-
-  const metadata =
-    workflowMetadata === undefined
-      ? undefined
-      : snapshotJson(workflowMetadata, `Workflow ${JSON.stringify(name)}`, ".metadata");
-  if (metadata !== undefined) {
-    assertPlainObject(metadata, `Workflow ${JSON.stringify(name)}`, ".metadata");
+  assertOnlyKeys(definition, ["name", "metadata", "matrix", "tasks"], "Workflow");
+  assertName(definition.name, "Workflow", ".name");
+  const owner = `Workflow ${JSON.stringify(definition.name)}`;
+  if (definition.metadata !== undefined) {
+    const metadata = snapshotJson(definition.metadata, owner, ".metadata");
+    assertPlainObject(metadata, owner, ".metadata");
+    info.metadata = metadata;
+  }
+  if (!functionSchema.safeParse(definition.tasks).success) {
+    fail(owner, ".tasks", "expected a synchronous function");
+  }
+  if (definition.matrix !== undefined && !functionSchema.safeParse(definition.matrix).success) {
+    fail(owner, ".matrix", "expected a function");
   }
 
-  if (!Array.isArray(taskDefinitions) || taskDefinitions.length === 0) {
-    fail("Workflow", ".tasks", "expected a non-empty Task tuple");
-  }
-
-  const names = new Set<string>();
-  const tasks = taskDefinitions.map((value, index) => {
-    const owner = `Workflow ${JSON.stringify(name)} Task ${index + 1}`;
-    assertPlainObject(value, owner, "");
-
-    if (value[taskDefinitionBrand] !== true) {
-      fail(owner, "", "expected a Task created by defineTask");
-    }
-    // SAFETY: The private brand proves this value came from defineTask, which supplies the runtime fields.
-    const task = value as RuntimeTask;
-
-    assertOnlyKeys(task, ["name", "matrix", "setup", "run", "teardown"], owner);
-    const taskSnapshot = { ...task };
-    assertName(taskSnapshot.name, owner, ".name");
-
-    if (names.has(taskSnapshot.name)) {
-      fail(owner, ".name", `duplicate Task name ${JSON.stringify(taskSnapshot.name)}`);
-    }
-    names.add(taskSnapshot.name);
-
-    if (!z.function().safeParse(taskSnapshot.run).success) {
-      fail(owner, ".run", "expected a function");
-    }
-    if (!z.function().safeParse(taskSnapshot.matrix).success) {
-      fail(owner, ".matrix", "expected a function");
-    }
-    if (taskSnapshot.setup !== undefined && !z.function().safeParse(taskSnapshot.setup).success) {
-      fail(owner, ".setup", "expected a function");
-    }
-    if (taskSnapshot.teardown !== undefined && !z.function().safeParse(taskSnapshot.teardown).success) {
-      fail(owner, ".teardown", "expected a function");
-    }
-    if (taskSnapshot.teardown && !taskSnapshot.setup) {
-      fail(owner, ".teardown", "requires setup");
-    }
-
-    return taskSnapshot;
+  const matrix = definition.matrix ? await definition.matrix() : {};
+  const coordinates = expandMatrix(matrix, owner).map((coordinate, index) => {
+    const coordinateOwner = `${owner} coordinate ${caseName(coordinate, index)}`;
+    return {
+      matrix: coordinate,
+      owner: coordinateOwner,
+      tasks: bindTasks(definition, coordinate, coordinateOwner),
+    };
   });
 
-  const preparedTasks = await Promise.all(
-    tasks.map(async (task) => {
-      const cases = expandMatrix(await task.matrix(), `Task ${JSON.stringify(task.name)}`);
-      return {
-        task,
-        cases,
-        names: cases.map(caseName),
-        metadata: cases.map((matrix) =>
-          metadata === undefined ? { schema: 1, matrix } : { schema: 1, matrix, metadata },
-        ),
-      } satisfies PreparedTask;
-    }),
+  return Promise.all(
+    coordinates.map(async (coordinate) => ({
+      matrix: coordinate.matrix,
+      tasks: await Promise.all(coordinate.tasks.map((task) => discoverTask(task, coordinate.owner))),
+    })),
   );
+}
 
-  return preparedTasks;
+function bindTasks<M extends Matrix>(definition: WorkflowDefinition<M, JsonObject>, matrix: JsonObject, owner: string) {
+  try {
+    // SAFETY: Expansion preserves M's axes; omitting the Matrix infers an empty coordinate.
+    const bindings = definition.tasks({ matrix: matrix as CaseCoordinates<M> });
+    if (!Array.isArray(bindings) || bindings.length === 0) {
+      fail(owner, ".tasks", "expected a non-empty Task tuple");
+    }
+    const names = new Set<string>();
+    return bindings.map((binding) => prepareBinding(binding, owner, names));
+  } catch (cause) {
+    throw errorWithContext(`${owner} Task binding failed`, cause);
+  }
+}
+
+async function discoverTask(task: RuntimeTask, owner: string): Promise<PreparedTask> {
+  const taskOwner = `${owner} Task ${JSON.stringify(task.name)}`;
+  try {
+    const matrix = await task.matrix({ params: task.params });
+    return { task, cases: expandMatrix(matrix, taskOwner) };
+  } catch (cause) {
+    throw errorWithContext(`${taskOwner} Matrix discovery failed`, cause);
+  }
+}
+
+function prepareBinding(binding: AnyTaskBinding, owner: string, names: Set<string>): RuntimeTask {
+  assertPlainObject(binding, owner, ".tasks");
+  if (binding[taskBindingBrand] !== true) {
+    fail(owner, ".tasks", "expected a bound Task created by defineTask");
+  }
+  // SAFETY: The private brand proves this is a binding created by defineTask with matching callbacks and params.
+  const task = binding as RuntimeTask;
+  assertOnlyKeys(task, ["name", "params", "matrix", "setup", "run", "teardown"], owner);
+  assertName(task.name, owner, ".tasks.name");
+  if (names.has(task.name)) {
+    fail(owner, ".tasks", `duplicate Task name ${JSON.stringify(task.name)}`);
+  }
+  names.add(task.name);
+  const taskOwner = `${owner} Task ${JSON.stringify(task.name)}`;
+  for (const key of ["matrix", "run", "setup", "teardown"] as const) {
+    if ((key === "setup" || key === "teardown") && task[key] === undefined) continue;
+    if (!functionSchema.safeParse(task[key]).success) fail(taskOwner, `.${key}`, "expected a function");
+  }
+  if (task.teardown && !task.setup) fail(taskOwner, ".teardown", "requires setup");
+  const params = snapshotJson(task.params, taskOwner, ".params");
+  assertPlainObject(params, taskOwner, ".params");
+  return { ...task, params };
 }

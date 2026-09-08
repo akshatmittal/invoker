@@ -4,77 +4,82 @@ import type {
   JsonObject,
   JsonValue,
   Matrix,
+  ParamsContext,
   SetupContext,
   TaskContext,
   TeardownContext,
 } from "./types.js";
 
-export const taskDefinitionBrand: unique symbol = Symbol("invoker.task");
+export const taskBindingBrand: unique symbol = Symbol("invoker.task-binding");
 
-export interface TaskDefinition<
+type ParameterArguments<Params> = [Params] extends [Record<string, never>] ? [] : [params: Params];
+
+type RequiredParameters<Params> = {
+  [Key in keyof Params]-?: Params[Key] extends JsonValue ? RequiredParameters<Params[Key]> : never;
+};
+
+export type TaskDefinition<
   Name extends string = string,
   M extends Matrix = Matrix,
   Setup = unknown,
   Output extends JsonValue = JsonValue,
-> {
+  Params extends JsonObject = Record<never, never>,
+> = (...args: ParameterArguments<Params>) => BoundTask<Name, M, Setup, Output, Params>;
+
+type TaskOptions<Name extends string, M extends Matrix, Setup, Output extends JsonValue, Params> = {
   readonly name: Name;
-  readonly matrix: () => Promise<M>;
-  readonly [taskDefinitionBrand]: true;
-  readonly setup?: (context: SetupContext<M>) => Awaitable<Setup>;
-  readonly run: (context: TaskContext<CaseCoordinates<M>, Setup>) => Awaitable<Output>;
-  readonly teardown?: (context: TeardownContext<M, Setup>) => Awaitable<void>;
+  readonly matrix?: (context: ParamsContext<Params>) => Promise<M>;
+  readonly setup?: (context: SetupContext<M, Params>) => Awaitable<Setup>;
+  readonly run: (context: TaskContext<CaseCoordinates<M>, Setup, Params>) => Awaitable<Output>;
+  readonly teardown?: (context: TeardownContext<M, Setup, Params>) => Awaitable<void>;
+};
+
+interface BoundTask<Name extends string, M extends Matrix, Setup, Output extends JsonValue, Params extends JsonObject>
+  extends TaskOptions<Name, M, Setup, Output, Params>, ParamsContext<Params> {
+  readonly matrix: (context: ParamsContext<Params>) => Promise<M>;
+  readonly [taskBindingBrand]: true;
 }
 
-type TaskWithSetup<Name extends string, M extends Matrix, Setup, Output extends JsonValue> = {
-  readonly name: Name;
-  readonly matrix?: () => Promise<M>;
-  readonly setup: (context: SetupContext<M>) => Awaitable<Setup>;
-  readonly run: (context: TaskContext<CaseCoordinates<M>, Setup>) => Awaitable<Output>;
-  readonly teardown?: (context: TeardownContext<M, Setup>) => Awaitable<void>;
-};
-
-type TaskWithoutSetup<Name extends string, M extends Matrix, Output extends JsonValue> = {
-  readonly name: Name;
-  readonly matrix?: () => Promise<M>;
-  readonly setup?: never;
-  readonly run: (context: TaskContext<CaseCoordinates<M>, undefined>) => Awaitable<Output>;
-  readonly teardown?: never;
-};
-
 export function defineTask<
-  const Name extends string,
-  const M extends Matrix = Record<never, never>,
-  Setup = unknown,
-  const Output extends JsonValue = JsonValue,
->(definition: TaskWithSetup<Name, M, Setup, Output>): TaskDefinition<Name, M, Setup, Output>;
+  Params extends Record<keyof Params, JsonValue> & RequiredParameters<Params> = Record<never, never>,
+>() {
+  function define<
+    const Name extends string,
+    const M extends Matrix = Record<never, never>,
+    Setup = unknown,
+    const Output extends JsonValue = JsonValue,
+  >(
+    definition: TaskOptions<Name, M, Setup, Output, Params> & {
+      readonly setup: (context: SetupContext<M, Params>) => Awaitable<Setup>;
+    },
+  ): TaskDefinition<Name, M, Setup, Output, Params>;
+  function define<
+    const Name extends string,
+    const M extends Matrix = Record<never, never>,
+    const Output extends JsonValue = JsonValue,
+  >(
+    definition: TaskOptions<Name, M, undefined, Output, Params> & {
+      readonly setup?: never;
+      readonly teardown?: never;
+    },
+  ): TaskDefinition<Name, M, undefined, Output, Params>;
+  function define<const Name extends string, const M extends Matrix, Setup, const Output extends JsonValue>(
+    definition: TaskOptions<Name, M, Setup, Output, Params>,
+  ) {
+    return (...args: ParameterArguments<Params>) => {
+      // SAFETY: The overloads preserve Params, Matrix, setup and Output; omitted inputs use their empty defaults.
+      return {
+        ...definition,
+        params: args.length === 0 ? {} : args[0],
+        matrix: definition.matrix ?? (async () => ({})),
+        [taskBindingBrand]: true,
+      } as BoundTask<Name, M, Setup, Output, Params>;
+    };
+  }
 
-export function defineTask<
-  const Name extends string,
-  const M extends Matrix = Record<never, never>,
-  const Output extends JsonValue = JsonValue,
->(definition: TaskWithoutSetup<Name, M, Output>): TaskDefinition<Name, M, undefined, Output>;
-
-export function defineTask<const Name extends string, const M extends Matrix, Setup, const Output extends JsonValue>(
-  definition: TaskWithSetup<Name, M, Setup, Output> | TaskWithoutSetup<Name, M, Output>,
-) {
-  return {
-    ...definition,
-    matrix: definition.matrix ?? (async () => ({})),
-    [taskDefinitionBrand]: true as const,
-  };
+  return define;
 }
 
-export type AnyTaskDefinition = {
-  readonly name: string;
-  readonly matrix: () => Promise<Matrix>;
-  readonly [taskDefinitionBrand]: true;
-};
+export type AnyTaskBinding = Pick<RuntimeTask, "name" | "params" | typeof taskBindingBrand>;
 
-export type RuntimeTask = {
-  readonly name: string;
-  readonly matrix: () => Promise<Matrix>;
-  readonly setup?: (context: SetupContext<Matrix>) => Awaitable<unknown>;
-  readonly run: (context: TaskContext<JsonObject, unknown>) => Awaitable<JsonValue>;
-  readonly teardown?: (context: TeardownContext<Matrix, unknown>) => Awaitable<void>;
-  readonly [taskDefinitionBrand]?: true;
-};
+export type RuntimeTask = BoundTask<string, Matrix, unknown, JsonValue, JsonObject>;

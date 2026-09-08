@@ -17,12 +17,16 @@ One execution of a Workflow, including its metadata and the results produced by 
 _Avoid_: Build, job
 
 **Case**:
-One execution of a Task for one value produced by expanding that Task's matrix.
+One execution of a Task for one combination of Workflow and Task Matrix values.
 _Avoid_: Job, matrix run
 
 **Matrix**:
-A set of named axes whose values expand into the Cases of a Task.
+A set of named axes whose values multiply executions. A Workflow Matrix combines with each Task's Matrix to produce its Cases.
 _Avoid_: Parameter set, variants
+
+**Task Parameters**:
+Inputs passed from a Workflow to a Task. Parameters may be fixed or derived from a Workflow Matrix value; passing a parameter does not itself multiply executions.
+_Avoid_: Metadata when referring to execution inputs
 
 **Output**:
 The JSON value produced by a successfully completed Case for later reporting and analysis.

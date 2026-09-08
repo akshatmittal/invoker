@@ -4,14 +4,8 @@ import type { Reporter } from "vitest/reporters";
 import { WebAPIRateLimitedError, WebClient } from "@slack/web-api";
 import { setTimeout } from "node:timers/promises";
 
-import {
-  collectWorkflowReports,
-  failureMessages,
-  retryMessages,
-  skipMessages,
-  summaryMessage,
-  unhandledErrorMessages,
-} from "./report.js";
+import { collectWorkflowReports } from "./collect.js";
+import { failureMessages, retryMessages, skipMessages, summaryMessage, unhandledErrorMessages } from "./report.js";
 
 export type SlackReporterOptions = {
   readonly token: string;

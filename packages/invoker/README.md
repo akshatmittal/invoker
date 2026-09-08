@@ -98,23 +98,29 @@ scheduler intentionally has no HTTP health endpoint.
 
 ## Define a Workflow
 
+Declare a Task's required parameters once, then bind them from each Workflow.
+TypeScript checks the bindings while inferring the Task's Matrix, setup, and Output:
+
 ```ts
 // regressions/model/tasks/evaluate-models.ts
 import { defineTask } from "@akshatmittal/invoker";
 
-export const evaluateModels = defineTask({
+type EvaluateParams = {
+  environment: "staging" | "production";
+  baseline: string;
+};
+
+export const evaluateModels = defineTask<EvaluateParams>()({
   name: "evaluate-models",
-  matrix: async () => ({
-    model: ["gpt-5", "gpt-5-mini"],
+  matrix: async ({ params }) => ({
+    model: await discoverModels(params.environment),
     dataset: ["support", "sales"],
   }),
-  setup: async ({ cases }) => loadFixtures(cases),
-  run: async ({ matrix, setup, vitest }) => {
+  setup: async ({ params, cases }) => loadFixtures(params.environment, cases),
+  run: async ({ params, matrix, setup, vitest }) => {
     vitest.expect(setup.has(matrix.dataset)).toBe(true);
-
     return {
-      model: matrix.model,
-      dataset: matrix.dataset,
+      baseline: params.baseline,
       score: await evaluate(matrix, setup),
     };
   },
@@ -131,21 +137,51 @@ import { evaluateModels } from "../tasks/evaluate-models.js";
 
 defineWorkflow({
   name: "model-regressions",
-  metadata: {
-    commit: process.env.GITHUB_SHA ?? "local",
-    baseline: "2026-08-01",
-  },
-  tasks: [evaluateModels],
+  metadata: { commit: process.env.GITHUB_SHA ?? "local" },
+  matrix: async () => ({ environment: ["staging", "production"] }),
+  tasks: ({ matrix }) => [
+    evaluateModels({
+      environment: matrix.environment,
+      baseline: "2026-09-01",
+    }),
+  ],
 });
 ```
 
-The Matrix function runs during collection and its returned literal determines the exact
-`matrix` type. `setup` determines the exact
-shared setup type, and the exact JSON return type is retained on the Task.
-Axis names must be non-empty, enumerable strings that are not array indexes.
-Omitting `matrix` creates one Case with `{}`. Setup runs once per Task, Cases
-within that Task run concurrently, and teardown runs once after successful
-setup. Tasks run sequentially in their Workflow.
+Calling `evaluateModels(...)` binds inputs; it does not execute the Task. All
+parameter properties are required and JSON-compatible. Missing fields, optional
+parameter declarations, and incompatible bindings fail typechecking. There is no
+SDK defaults mechanism. Use setup for clients and other non-JSON resources.
+
+For a parameterless Task, use `defineTask()({ name, run })` and bind it with no
+argument. Workflow `tasks` is always a synchronous callback returning a nonempty
+Task list. It can select different Tasks per Workflow coordinate; names must be
+unique within each coordinate. Reuse the same Task in other Workflows with new
+bindings.
+
+Both Matrix functions run during collection. The Workflow Matrix resolves once;
+Task binding runs once per Workflow coordinate, and each bound Task discovers its
+own Matrix once. Task discovery can run concurrently across coordinates. All
+bindings and matrices are validated before executable suites are registered; a
+discovery failure prevents that Workflow's execution.
+
+Workflow axes multiply Task axes. For two environments and three Task models,
+there are six Cases. Execution follows the complete Task sequence for staging,
+then the complete sequence for production. Each bound Task gets its own setup and
+teardown, and its Cases run concurrently under Vitest's limits. Execution failures
+normally allow later Tasks to continue; Vitest's bail configuration controls
+stopping early.
+
+Parameters are validated and snapshotted during collection and passed readonly to
+Matrix discovery, setup, run, and teardown. Task `matrix` and setup's `cases`
+contain only Task coordinates; Workflow coordinates enter through explicit
+parameter binding. Retries share that binding's parameter snapshot and setup
+result. Teardown runs once after successful setup.
+
+Omitting either Matrix creates one coordinate, `{}`. Axis names must be non-empty,
+enumerable strings that are not array indexes. Empty axes and duplicate values
+are errors. Vitest shows Workflow → Workflow coordinate → Task → Case, with `[1]`
+for empty coordinates and numbered axis values otherwise.
 
 ## Configure Vitest
 
@@ -178,26 +214,37 @@ Define additional Workflows in separate `*.test.ts` files. Vitest discovers
 them automatically; Invoker does not scan directories or require a central
 index.
 
-The metadata envelope is stable and JSON-compatible:
+Schema 2 keeps both coordinate scopes and all bound parameters in the JSON report:
 
 ```json
 {
-  "schema": 1,
-  "matrix": { "model": "gpt-5", "dataset": "support" },
+  "schema": 2,
+  "matrix": {
+    "workflow": { "environment": "staging" },
+    "task": { "model": "model-a", "dataset": "support" }
+  },
+  "params": { "environment": "staging", "baseline": "2026-09-01" },
   "metadata": { "commit": "abc123" },
-  "output": { "model": "gpt-5", "dataset": "support", "score": 0.92 }
+  "output": { "baseline": "2026-09-01", "score": 0.92 }
 }
 ```
 
-`output` is present only after a successful, JSON-valid Task return. Vitest's
-report remains authoritative for status, failures, timing, hierarchy, and
+`matrix.workflow`, `matrix.task`, and `params` are always present, with `{}` for
+empty scopes. Parameters are persisted in full, including fixed configuration;
+there is no automatic redaction. Static coordinates and parameters survive setup
+failures, skips, and retries. `output` is present only after a successful,
+JSON-valid Task return and is cleared before every retry. Vitest's report remains authoritative for status, failures, timing, hierarchy, and
 retries.
 
 ## Notify Slack
 
 Invoker's optional Slack reporter posts one `Invoker Report` parent message per
 Vitest run containing every Workflow card. Each card includes aggregate results,
-Workflow metadata, and a table of Task counts and durations. A shared footer
+Workflow metadata, and a table with counts and durations per Workflow
+coordinate/Task pair. Failures, retries, and skips identify both Matrix scopes.
+Collection failures produce a failed Workflow card even without collected Cases.
+Full parameters are persisted in JSON rather than printed automatically in Slack.
+A shared footer
 contains the elapsed span from the first Case start to the final Case completion,
 a localized timestamp, and the optional run link. Final failures, successful
 retry details, skipped Case reasons, and unhandled run errors are posted in the

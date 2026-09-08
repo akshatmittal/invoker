@@ -1,93 +1,17 @@
-import type { TestModule, TestSuite } from "vitest/node";
-
 import { z } from "zod";
 
 import type { JsonObject } from "../types.js";
+import type { TaskReport, WorkflowReport } from "./collect.js";
+
+import { errorMessage } from "../errors.js";
+import { timeSpan } from "./collect.js";
 
 const stringSchema = z.string();
-const jsonObjectSchema = z.record(stringSchema, z.json());
-const invokerMetaSchema = z.strictObject({
-  schema: z.literal(1),
-  matrix: jsonObjectSchema,
-  metadata: jsonObjectSchema.optional(),
-  output: z.json().optional(),
-});
-const testMetaSchema = z.object({ invoker: invokerMetaSchema.optional() });
-const errorMessageSchema = z.object({ message: stringSchema });
-const errorStackSchema = z.object({ stack: stringSchema });
 const TABLE_ROW_LIMIT = 100;
 const TABLE_CHARACTER_LIMIT = 10_000;
 const SECTION_CHARACTER_LIMIT = 3_000;
 const NAME_CHARACTER_LIMIT = 200;
 const METADATA_CHARACTER_LIMIT = 1_800;
-
-type Failure = {
-  readonly task?: string;
-  readonly caseName?: string;
-  readonly matrix?: JsonObject;
-  readonly messages: readonly string[];
-};
-
-type Retry = {
-  readonly task: string;
-  readonly caseName: string;
-  readonly matrix: JsonObject;
-  readonly count: number;
-  readonly messages: readonly string[];
-};
-
-type Skip = {
-  readonly task: string;
-  readonly caseName: string;
-  readonly matrix: JsonObject;
-  readonly reason: string;
-};
-
-export type TaskReport = {
-  readonly name: string;
-  readonly total: number;
-  readonly passed: number;
-  readonly retried: number;
-  readonly failed: number;
-  readonly skipped: number;
-  readonly incomplete: number;
-  readonly duration: number;
-};
-
-export type WorkflowReport = {
-  readonly name: string;
-  readonly metadata?: JsonObject;
-  readonly tasks: readonly TaskReport[];
-  readonly failures: readonly Failure[];
-  readonly retries: readonly Retry[];
-  readonly skips: readonly Skip[];
-  readonly startedAt?: number;
-  readonly endedAt?: number;
-};
-
-type MutableTaskReport = {
-  readonly name: string;
-  readonly suite: TestSuite;
-  total: number;
-  passed: number;
-  retried: number;
-  failed: number;
-  skipped: number;
-  incomplete: number;
-  startedAt?: number;
-  endedAt?: number;
-  readonly failures: Failure[];
-  readonly retries: Retry[];
-  readonly skips: Skip[];
-};
-
-type MutableWorkflowReport = {
-  readonly name: string;
-  readonly module: TestModule;
-  readonly suite: TestSuite;
-  readonly metadata?: JsonObject;
-  readonly tasks: Map<TestSuite, MutableTaskReport>;
-};
 
 type WorkflowStatus = {
   readonly emoji: string;
@@ -98,124 +22,6 @@ type RawCell = {
   readonly type: "raw_text";
   readonly text: string;
 };
-
-export function collectWorkflowReports(modules: ReadonlyArray<TestModule>): WorkflowReport[] {
-  const workflows = new Map<TestSuite, MutableWorkflowReport>();
-
-  for (const module of modules) {
-    for (const testCase of module.children.allTests()) {
-      const meta = testMetaSchema.safeParse(testCase.meta());
-      const invoker = meta.success ? meta.data.invoker : undefined;
-      const taskSuite = testCase.parent;
-      const workflowSuite = taskSuite.type === "suite" ? taskSuite.parent : undefined;
-
-      if (!invoker || taskSuite.type !== "suite" || workflowSuite?.type !== "suite") continue;
-
-      let workflow = workflows.get(workflowSuite);
-      if (!workflow) {
-        workflow = {
-          name: workflowSuite.name,
-          module,
-          suite: workflowSuite,
-          metadata: invoker.metadata,
-          tasks: new Map(),
-        };
-        workflows.set(workflowSuite, workflow);
-      }
-
-      let task = workflow.tasks.get(taskSuite);
-      if (!task) {
-        task = {
-          name: taskSuite.name,
-          suite: taskSuite,
-          total: 0,
-          passed: 0,
-          retried: 0,
-          failed: 0,
-          skipped: 0,
-          incomplete: 0,
-          failures: [],
-          retries: [],
-          skips: [],
-        };
-        workflow.tasks.set(taskSuite, task);
-      }
-
-      task.total += 1;
-      const result = testCase.result();
-      const diagnostic = testCase.diagnostic();
-      task[result.state === "pending" ? "incomplete" : result.state] += 1;
-      const retryCount = diagnostic?.retryCount ?? 0;
-      if (retryCount > 0) {
-        task.retried += 1;
-        if (result.state === "passed") {
-          task.retries.push({
-            task: task.name,
-            caseName: testCase.name,
-            matrix: invoker.matrix,
-            count: retryCount,
-            messages: (result.errors ?? []).map(errorMessage),
-          });
-        }
-      }
-
-      if (diagnostic) {
-        task.startedAt = Math.min(task.startedAt ?? diagnostic.startTime, diagnostic.startTime);
-        task.endedAt = Math.max(task.endedAt ?? 0, diagnostic.startTime + diagnostic.duration);
-      }
-
-      if (result.state === "failed") {
-        task.failures.push({
-          task: task.name,
-          caseName: testCase.name,
-          matrix: invoker.matrix,
-          messages: result.errors.map(errorMessage),
-        });
-      } else if (result.state === "skipped") {
-        task.skips.push({
-          task: task.name,
-          caseName: testCase.name,
-          matrix: invoker.matrix,
-          reason: result.note || "No reason provided",
-        });
-      }
-    }
-  }
-
-  return [...workflows.values()].map((workflow) => {
-    const failures: Failure[] = [];
-    const retries: Retry[] = [];
-    const skips: Skip[] = [];
-    addErrors(failures, workflow.suite.errors());
-    addErrors(failures, workflow.module.errors());
-
-    const collectedTasks = [...workflow.tasks.values()];
-    for (const task of collectedTasks) {
-      failures.push(...task.failures);
-      retries.push(...task.retries);
-      skips.push(...task.skips);
-      addErrors(failures, task.suite.errors(), task.name);
-    }
-
-    const { startedAt, endedAt } = timeSpan(collectedTasks);
-
-    return {
-      name: workflow.name,
-      metadata: workflow.metadata,
-      tasks: collectedTasks.map(
-        ({ suite: _suite, failures: _failures, retries: _retries, skips: _skips, startedAt, endedAt, ...task }) => ({
-          ...task,
-          duration: startedAt === undefined || endedAt === undefined ? 0 : endedAt - startedAt,
-        }),
-      ),
-      failures: deduplicateFailures(failures),
-      retries,
-      skips,
-      startedAt,
-      endedAt,
-    };
-  });
-}
 
 export function summaryMessage(reports: readonly WorkflowReport[], runUrl?: string) {
   const timestamp = Math.floor(Date.now() / 1_000);
@@ -260,7 +66,8 @@ function workflowAttachment(
   const status = workflowStatus(report);
   const metadata = metadataText(report.metadata);
   const page = pages > 1 ? ` (${index + 1}/${pages})` : "";
-  const headline = `${status.emoji} *${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))} — ${totals.passed}/${totals.total} passed${page}*`;
+  const result = report.tasks.length === 0 ? "Collection failed" : `${totals.passed}/${totals.total} passed`;
+  const headline = `${status.emoji} *${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))} — ${result}${page}*`;
 
   return {
     color: status.color,
@@ -294,13 +101,7 @@ function workflowAttachment(
 }
 
 export function failureMessages(report: WorkflowReport) {
-  const groups = Map.groupBy(report.failures, (failure) => failure.task);
-
-  return [...groups].flatMap(([task, failures]) => {
-    const title = escapeSlack(truncate(task ?? "Workflow errors", NAME_CHARACTER_LIMIT));
-    const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
-    const metadata = metadataText(report.metadata);
-    const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+  return [...Map.groupBy(report.failures, (failure) => failure.task)].flatMap(([task, failures]) => {
     const entries = failures.map((failure) => {
       const scope = failure.caseName
         ? `*${escapeSlack(failure.caseName)}*`
@@ -311,130 +112,68 @@ export function failureMessages(report: WorkflowReport) {
       const messages = failure.messages.map((message) => `\n• ${escapeSlack(message)}`).join("");
       return `${scope}${matrix}${messages}`;
     });
-
-    return chunk(entries, 3_000).map((details, index, messages) => {
-      const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
-      const summary = `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task ?? "Workflow", NAME_CHARACTER_LIMIT)} — ${failures.length} failed${part}`;
-
-      return {
-        text: summary,
-        attachments: [
-          {
-            color: "danger",
-            blocks: [
-              {
-                type: "section" as const,
-                text: {
-                  type: "mrkdwn" as const,
-                  text: `🔴 *${title} — ${failures.length} failed${part}*`,
-                },
-              },
-              {
-                type: "context" as const,
-                elements: [{ type: "mrkdwn" as const, text: context }],
-              },
-              {
-                type: "section" as const,
-                text: { type: "mrkdwn" as const, text: details },
-              },
-            ],
-          },
-        ],
-      };
-    });
+    return detailMessages(report, task, "failed", entries);
   });
 }
 
 export function retryMessages(report: WorkflowReport) {
-  const groups = Map.groupBy(report.retries, (retry) => retry.task);
-
-  return [...groups].flatMap(([task, retries]) => {
-    const title = escapeSlack(truncate(task, NAME_CHARACTER_LIMIT));
-    const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
-    const metadata = metadataText(report.metadata);
-    const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+  return [...Map.groupBy(report.retries, (retry) => retry.task)].flatMap(([task, retries]) => {
     const entries = retries.map((retry) => {
       const matrix = `\nMatrix: ${escapeSlack(JSON.stringify(retry.matrix))}`;
       const messages = retry.messages.map((message) => `\n• ${escapeSlack(message)}`).join("");
       return `*${escapeSlack(retry.caseName)}*\nRetries: ${retry.count}${matrix}${messages}`;
     });
-
-    return chunk(entries, SECTION_CHARACTER_LIMIT).map((details, index, messages) => {
-      const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
-      const summary = `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task, NAME_CHARACTER_LIMIT)} — ${retries.length} retried${part}`;
-
-      return {
-        text: summary,
-        attachments: [
-          {
-            color: "warning",
-            blocks: [
-              {
-                type: "section" as const,
-                text: {
-                  type: "mrkdwn" as const,
-                  text: `🟡 *${title} — ${retries.length} retried${part}*`,
-                },
-              },
-              {
-                type: "context" as const,
-                elements: [{ type: "mrkdwn" as const, text: context }],
-              },
-              {
-                type: "section" as const,
-                text: { type: "mrkdwn" as const, text: details },
-              },
-            ],
-          },
-        ],
-      };
-    });
+    return detailMessages(report, task, "retried", entries);
   });
 }
 
 export function skipMessages(report: WorkflowReport) {
-  const groups = Map.groupBy(report.skips, (skip) => skip.task);
-
-  return [...groups].flatMap(([task, skips]) => {
-    const title = escapeSlack(truncate(task, NAME_CHARACTER_LIMIT));
-    const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
-    const metadata = metadataText(report.metadata);
-    const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+  return [...Map.groupBy(report.skips, (skip) => skip.task)].flatMap(([task, skips]) => {
     const entries = skips.map((skip) => {
       const matrix = `\nMatrix: ${escapeSlack(JSON.stringify(skip.matrix))}`;
       return `*${escapeSlack(skip.caseName)}*${matrix}\nReason: ${escapeSlack(skip.reason)}`;
     });
+    return detailMessages(report, task, "skipped", entries);
+  });
+}
 
-    return chunk(entries, SECTION_CHARACTER_LIMIT).map((details, index, messages) => {
-      const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
-      const summary = `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task, NAME_CHARACTER_LIMIT)} — ${skips.length} skipped${part}`;
+function detailMessages(
+  report: WorkflowReport,
+  task: string | undefined,
+  outcome: "failed" | "retried" | "skipped",
+  entries: readonly string[],
+) {
+  const title = escapeSlack(truncate(task ?? "Workflow errors", NAME_CHARACTER_LIMIT));
+  const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
+  const metadata = metadataText(report.metadata);
+  const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+  const emoji = outcome === "failed" ? "🔴" : "🟡";
 
-      return {
-        text: summary,
-        attachments: [
-          {
-            color: "warning",
-            blocks: [
-              {
-                type: "section" as const,
-                text: {
-                  type: "mrkdwn" as const,
-                  text: `🟡 *${title} — ${skips.length} skipped${part}*`,
-                },
-              },
-              {
-                type: "context" as const,
-                elements: [{ type: "mrkdwn" as const, text: context }],
-              },
-              {
-                type: "section" as const,
-                text: { type: "mrkdwn" as const, text: details },
-              },
-            ],
-          },
-        ],
-      };
-    });
+  return chunk(entries, SECTION_CHARACTER_LIMIT).map((details, index, messages) => {
+    const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
+    const count = `${entries.length} ${outcome}${part}`;
+    return {
+      text: `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task ?? "Workflow", NAME_CHARACTER_LIMIT)} — ${count}`,
+      attachments: [
+        {
+          color: outcome === "failed" ? "danger" : "warning",
+          blocks: [
+            {
+              type: "section" as const,
+              text: { type: "mrkdwn" as const, text: `${emoji} *${title} — ${count}*` },
+            },
+            {
+              type: "context" as const,
+              elements: [{ type: "mrkdwn" as const, text: context }],
+            },
+            {
+              type: "section" as const,
+              text: { type: "mrkdwn" as const, text: details },
+            },
+          ],
+        },
+      ],
+    };
   });
 }
 
@@ -462,36 +201,6 @@ export function unhandledErrorMessages(errors: readonly unknown[]) {
         },
       ],
     };
-  });
-}
-
-function addErrors(failures: Failure[], errors: readonly unknown[], task?: string): void {
-  const messages = errors.map(errorMessage);
-  if (messages.length > 0) failures.push({ task, messages });
-}
-
-function errorMessage(cause: unknown): string {
-  const message = errorMessageSchema.safeParse(cause);
-  if (message.success) return message.data.message;
-
-  const stack = errorStackSchema.safeParse(cause);
-  if (stack.success) return stack.data.stack.split("\n", 1)[0]!;
-
-  return String(cause);
-}
-
-function deduplicateFailures(failures: Failure[]): Failure[] {
-  const seen = new Set<string>();
-
-  return failures.flatMap((failure) => {
-    const messages = failure.messages.filter((message) => {
-      const key = JSON.stringify([failure.task, failure.caseName, failure.matrix, message]);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    return messages.length > 0 ? [{ ...failure, messages }] : [];
   });
 }
 
@@ -585,7 +294,7 @@ function chunk(entries: readonly string[], limit: number): string[] {
   const chunks: string[] = [];
 
   for (const entry of entries) {
-    const value = entry.length > limit ? `${entry.slice(0, limit - 1)}…` : entry;
+    const value = truncate(entry, limit);
     const previous = chunks.at(-1);
 
     if (previous && previous.length + value.length + 2 <= limit) {
@@ -600,14 +309,4 @@ function chunk(entries: readonly string[], limit: number): string[] {
 
 function truncate(value: string, limit: number): string {
   return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
-}
-
-function timeSpan(values: readonly { readonly startedAt?: number; readonly endedAt?: number }[]) {
-  let startedAt: number | undefined;
-  let endedAt: number | undefined;
-  for (const value of values) {
-    if (value.startedAt !== undefined) startedAt = Math.min(startedAt ?? value.startedAt, value.startedAt);
-    if (value.endedAt !== undefined) endedAt = Math.max(endedAt ?? value.endedAt, value.endedAt);
-  }
-  return { startedAt, endedAt };
 }

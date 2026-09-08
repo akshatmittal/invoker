@@ -1,9 +1,13 @@
 # Invoker example
 
 This private workspace package demonstrates two Invoker regression Workflows
-in separate Vitest-discovered files. They reuse one Task with a typed matrix,
-shared setup, concurrent Cases, teardown, Vitest assertions, and JSON Output
-metadata.
+in separate Vitest-discovered files. They reuse one Task with required typed
+parameters, a Task Matrix, shared setup, concurrent Cases, teardown, and JSON
+Output. The example Workflow expands staging and production into eight Cases;
+the release Workflow binds production directly and produces four Cases.
+
+Schema 2 results retain Workflow coordinates, Task coordinates, and all bound
+parameters. Setup and teardown run separately for each coordinate/Task pair.
 
 ```text
 src/
