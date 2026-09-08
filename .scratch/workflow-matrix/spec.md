@@ -23,8 +23,7 @@ const evaluate = defineTask<EvaluateParams>()({
   matrix: async ({ params }) => ({
     model: await discoverModels(params.environment),
   }),
-  setup: async ({ params, cases }) =>
-    openEvaluator(params.environment, params.baseline, cases),
+  setup: async ({ params, cases }) => openEvaluator(params.environment, params.baseline, cases),
   run: async ({ params, matrix, setup, vitest }) => {
     const score = await setup.evaluate(matrix.model);
     vitest.expect(score).toBeGreaterThanOrEqual(0);
@@ -56,9 +55,7 @@ defineWorkflow({
 // Reuse the same Task with a different fixed input and no Workflow Matrix.
 defineWorkflow({
   name: "production-baseline",
-  tasks: () => [
-    evaluate({ environment: "production", baseline: "2026-08-01" }),
-  ],
+  tasks: () => [evaluate({ environment: "production", baseline: "2026-08-01" })],
 });
 ```
 
@@ -96,12 +93,12 @@ Separate Workflow modules remain subject to Vitest's own worker scheduling. Conc
 
 ## Failure behavior
 
-| Failure | Result |
-| --- | --- |
-| Workflow discovery, binding, parameter validation, or Task discovery | Workflow collection fails before any of its Tasks execute; no partial Workflow execution. |
-| Setup | Native Vitest hook failure; no Case callback for that binding executes; static Case coordinates and parameters remain available. |
-| Case execution or invalid Output | Native failed Case; successful JSON Output is retained only for a successful attempt. |
-| Teardown | Native hook failure; completed Case results and Outputs remain intact. |
+| Failure                                                              | Result                                                                                                                           |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Workflow discovery, binding, parameter validation, or Task discovery | Workflow collection fails before any of its Tasks execute; no partial Workflow execution.                                        |
+| Setup                                                                | Native Vitest hook failure; no Case callback for that binding executes; static Case coordinates and parameters remain available. |
+| Case execution or invalid Output                                     | Native failed Case; successful JSON Output is retained only for a successful attempt.                                            |
+| Teardown                                                             | Native hook failure; completed Case results and Outputs remain intact.                                                           |
 
 Later Tasks and Workflow coordinates continue after execution failures under normal Vitest behavior; explicit bail configuration may stop them. A failing setup is responsible for cleaning up resources allocated before it threw. Teardown runs only after successful setup.
 
