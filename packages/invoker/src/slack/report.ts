@@ -3,7 +3,8 @@ import { z } from "zod";
 import type { JsonObject } from "../types.js";
 import type { TaskReport, WorkflowReport } from "./collect.js";
 
-import { errorMessage, timeSpan } from "./collect.js";
+import { errorMessage } from "../errors.js";
+import { timeSpan } from "./collect.js";
 
 const stringSchema = z.string();
 const TABLE_ROW_LIMIT = 100;
@@ -100,13 +101,7 @@ function workflowAttachment(
 }
 
 export function failureMessages(report: WorkflowReport) {
-  const groups = Map.groupBy(report.failures, (failure) => failure.task);
-
-  return [...groups].flatMap(([task, failures]) => {
-    const title = escapeSlack(truncate(task ?? "Workflow errors", NAME_CHARACTER_LIMIT));
-    const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
-    const metadata = metadataText(report.metadata);
-    const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+  return [...Map.groupBy(report.failures, (failure) => failure.task)].flatMap(([task, failures]) => {
     const entries = failures.map((failure) => {
       const scope = failure.caseName
         ? `*${escapeSlack(failure.caseName)}*`
@@ -117,130 +112,68 @@ export function failureMessages(report: WorkflowReport) {
       const messages = failure.messages.map((message) => `\n• ${escapeSlack(message)}`).join("");
       return `${scope}${matrix}${messages}`;
     });
-
-    return chunk(entries, 3_000).map((details, index, messages) => {
-      const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
-      const summary = `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task ?? "Workflow", NAME_CHARACTER_LIMIT)} — ${failures.length} failed${part}`;
-
-      return {
-        text: summary,
-        attachments: [
-          {
-            color: "danger",
-            blocks: [
-              {
-                type: "section" as const,
-                text: {
-                  type: "mrkdwn" as const,
-                  text: `🔴 *${title} — ${failures.length} failed${part}*`,
-                },
-              },
-              {
-                type: "context" as const,
-                elements: [{ type: "mrkdwn" as const, text: context }],
-              },
-              {
-                type: "section" as const,
-                text: { type: "mrkdwn" as const, text: details },
-              },
-            ],
-          },
-        ],
-      };
-    });
+    return detailMessages(report, task, "failed", entries);
   });
 }
 
 export function retryMessages(report: WorkflowReport) {
-  const groups = Map.groupBy(report.retries, (retry) => retry.task);
-
-  return [...groups].flatMap(([task, retries]) => {
-    const title = escapeSlack(truncate(task, NAME_CHARACTER_LIMIT));
-    const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
-    const metadata = metadataText(report.metadata);
-    const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+  return [...Map.groupBy(report.retries, (retry) => retry.task)].flatMap(([task, retries]) => {
     const entries = retries.map((retry) => {
       const matrix = `\nMatrix: ${escapeSlack(JSON.stringify(retry.matrix))}`;
       const messages = retry.messages.map((message) => `\n• ${escapeSlack(message)}`).join("");
       return `*${escapeSlack(retry.caseName)}*\nRetries: ${retry.count}${matrix}${messages}`;
     });
-
-    return chunk(entries, SECTION_CHARACTER_LIMIT).map((details, index, messages) => {
-      const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
-      const summary = `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task, NAME_CHARACTER_LIMIT)} — ${retries.length} retried${part}`;
-
-      return {
-        text: summary,
-        attachments: [
-          {
-            color: "warning",
-            blocks: [
-              {
-                type: "section" as const,
-                text: {
-                  type: "mrkdwn" as const,
-                  text: `🟡 *${title} — ${retries.length} retried${part}*`,
-                },
-              },
-              {
-                type: "context" as const,
-                elements: [{ type: "mrkdwn" as const, text: context }],
-              },
-              {
-                type: "section" as const,
-                text: { type: "mrkdwn" as const, text: details },
-              },
-            ],
-          },
-        ],
-      };
-    });
+    return detailMessages(report, task, "retried", entries);
   });
 }
 
 export function skipMessages(report: WorkflowReport) {
-  const groups = Map.groupBy(report.skips, (skip) => skip.task);
-
-  return [...groups].flatMap(([task, skips]) => {
-    const title = escapeSlack(truncate(task, NAME_CHARACTER_LIMIT));
-    const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
-    const metadata = metadataText(report.metadata);
-    const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+  return [...Map.groupBy(report.skips, (skip) => skip.task)].flatMap(([task, skips]) => {
     const entries = skips.map((skip) => {
       const matrix = `\nMatrix: ${escapeSlack(JSON.stringify(skip.matrix))}`;
       return `*${escapeSlack(skip.caseName)}*${matrix}\nReason: ${escapeSlack(skip.reason)}`;
     });
+    return detailMessages(report, task, "skipped", entries);
+  });
+}
 
-    return chunk(entries, SECTION_CHARACTER_LIMIT).map((details, index, messages) => {
-      const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
-      const summary = `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task, NAME_CHARACTER_LIMIT)} — ${skips.length} skipped${part}`;
+function detailMessages(
+  report: WorkflowReport,
+  task: string | undefined,
+  outcome: "failed" | "retried" | "skipped",
+  entries: readonly string[],
+) {
+  const title = escapeSlack(truncate(task ?? "Workflow errors", NAME_CHARACTER_LIMIT));
+  const workflow = `*Workflow:* ${escapeSlack(truncate(report.name, NAME_CHARACTER_LIMIT))}`;
+  const metadata = metadataText(report.metadata);
+  const context = metadata ? `${workflow}  •  ${metadata}` : workflow;
+  const emoji = outcome === "failed" ? "🔴" : "🟡";
 
-      return {
-        text: summary,
-        attachments: [
-          {
-            color: "warning",
-            blocks: [
-              {
-                type: "section" as const,
-                text: {
-                  type: "mrkdwn" as const,
-                  text: `🟡 *${title} — ${skips.length} skipped${part}*`,
-                },
-              },
-              {
-                type: "context" as const,
-                elements: [{ type: "mrkdwn" as const, text: context }],
-              },
-              {
-                type: "section" as const,
-                text: { type: "mrkdwn" as const, text: details },
-              },
-            ],
-          },
-        ],
-      };
-    });
+  return chunk(entries, SECTION_CHARACTER_LIMIT).map((details, index, messages) => {
+    const part = messages.length > 1 ? ` (${index + 1}/${messages.length})` : "";
+    const count = `${entries.length} ${outcome}${part}`;
+    return {
+      text: `${truncate(report.name, NAME_CHARACTER_LIMIT)} › ${truncate(task ?? "Workflow", NAME_CHARACTER_LIMIT)} — ${count}`,
+      attachments: [
+        {
+          color: outcome === "failed" ? "danger" : "warning",
+          blocks: [
+            {
+              type: "section" as const,
+              text: { type: "mrkdwn" as const, text: `${emoji} *${title} — ${count}*` },
+            },
+            {
+              type: "context" as const,
+              elements: [{ type: "mrkdwn" as const, text: context }],
+            },
+            {
+              type: "section" as const,
+              text: { type: "mrkdwn" as const, text: details },
+            },
+          ],
+        },
+      ],
+    };
   });
 }
 
@@ -361,7 +294,7 @@ function chunk(entries: readonly string[], limit: number): string[] {
   const chunks: string[] = [];
 
   for (const entry of entries) {
-    const value = entry.length > limit ? `${entry.slice(0, limit - 1)}…` : entry;
+    const value = truncate(entry, limit);
     const previous = chunks.at(-1);
 
     if (previous && previous.length + value.length + 2 <= limit) {

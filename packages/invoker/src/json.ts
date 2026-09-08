@@ -5,14 +5,9 @@ import type { JsonObject, JsonValue } from "./types.js";
 const scalarSchema = z.union([z.null(), z.string(), z.boolean(), z.number()]);
 const nameSchema = z.string().trim().min(1);
 
-export function snapshotJson<const Value extends JsonValue>(
-  value: Value,
-  owner: string,
-  path: string,
-  ancestors = new Set<object>(),
-): Value {
+export function snapshotJson<const Value extends JsonValue>(value: Value, owner: string, path: string): Value {
   // SAFETY: The recursive copy preserves every JSON primitive, array, and object shape in Value.
-  return cloneJson(value, owner, path, ancestors) as Value;
+  return cloneJson(value, owner, path, new Set<object>()) as Value;
 }
 
 function cloneJson(value: JsonValue, owner: string, path: string, ancestors: Set<object>): JsonValue {
@@ -37,17 +32,17 @@ function cloneJson(value: JsonValue, owner: string, path: string, ancestors: Set
     }
     ancestors.delete(value);
     return snapshot;
-  } else {
-    assertPlainObject(value, owner, path);
-    if (Object.getOwnPropertySymbols(value).length > 0) {
-      fail(owner, path, "JSON objects cannot have symbol keys");
-    }
-    const snapshot = Object.fromEntries(
-      Object.entries(value).map(([key, child]) => [key, cloneJson(child, owner, `${path}.${key}`, ancestors)]),
-    );
-    ancestors.delete(value);
-    return snapshot;
   }
+
+  assertPlainObject(value, owner, path);
+  if (Object.getOwnPropertySymbols(value).length > 0) {
+    fail(owner, path, "JSON objects cannot have symbol keys");
+  }
+  const snapshot = Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [key, cloneJson(child, owner, `${path}.${key}`, ancestors)]),
+  );
+  ancestors.delete(value);
+  return snapshot;
 }
 
 export function assertPlainObject<Value extends object>(value: Value, owner: string, path: string): void {

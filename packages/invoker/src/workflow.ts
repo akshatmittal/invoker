@@ -6,9 +6,12 @@ import { z } from "zod";
 import type { AnyTaskBinding, RuntimeTask } from "./task.js";
 import type { CaseCoordinates, InvokerMeta, JsonObject, JsonValue, Matrix } from "./types.js";
 
+import { errorWithContext } from "./errors.js";
 import { assertName, assertOnlyKeys, assertPlainObject, fail, snapshotJson } from "./json.js";
 import { caseName, expandMatrix } from "./matrix.js";
 import { taskBindingBrand } from "./task.js";
+
+const functionSchema = z.function();
 
 type WorkflowDefinition<M extends Matrix, Metadata extends JsonObject> = {
   readonly name: string;
@@ -53,10 +56,7 @@ export function defineWorkflow<
     } catch (cause) {
       // Vitest drops suites when collection throws. File metadata retains the failed Workflow's identity.
       Object.assign(file.meta, { invokerCollectionError: info });
-      throw new Error(
-        `Workflow ${JSON.stringify(info.name)} collection failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-        { cause },
-      );
+      throw errorWithContext(`Workflow ${JSON.stringify(info.name)} collection failed`, cause);
     }
   });
 }
@@ -106,54 +106,53 @@ async function prepareWorkflow<M extends Matrix>(definition: WorkflowDefinition<
     assertPlainObject(metadata, owner, ".metadata");
     info.metadata = metadata;
   }
-  if (!z.function().safeParse(definition.tasks).success) {
+  if (!functionSchema.safeParse(definition.tasks).success) {
     fail(owner, ".tasks", "expected a synchronous function");
   }
-  if (definition.matrix !== undefined && !z.function().safeParse(definition.matrix).success) {
+  if (definition.matrix !== undefined && !functionSchema.safeParse(definition.matrix).success) {
     fail(owner, ".matrix", "expected a function");
   }
 
   const matrix = definition.matrix ? await definition.matrix() : {};
   const coordinates = expandMatrix(matrix, owner).map((coordinate, index) => {
     const coordinateOwner = `${owner} coordinate ${caseName(coordinate, index)}`;
-    try {
-      // SAFETY: Expansion preserves M's axes; omitting the Matrix infers an empty coordinate.
-      const bindings = definition.tasks({ matrix: coordinate as CaseCoordinates<M> });
-      if (!Array.isArray(bindings) || bindings.length === 0) {
-        fail(coordinateOwner, ".tasks", "expected a non-empty Task tuple");
-      }
-      const names = new Set<string>();
-      return {
-        matrix: coordinate,
-        owner: coordinateOwner,
-        tasks: bindings.map((binding) => prepareBinding(binding, coordinateOwner, names)),
-      };
-    } catch (cause) {
-      throw new Error(
-        `${coordinateOwner} Task binding failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-        { cause },
-      );
-    }
+    return {
+      matrix: coordinate,
+      owner: coordinateOwner,
+      tasks: bindTasks(definition, coordinate, coordinateOwner),
+    };
   });
 
   return Promise.all(
     coordinates.map(async (coordinate) => ({
       matrix: coordinate.matrix,
-      tasks: await Promise.all(
-        coordinate.tasks.map(async (task) => {
-          const taskOwner = `${coordinate.owner} Task ${JSON.stringify(task.name)}`;
-          try {
-            return { task, cases: expandMatrix(await task.matrix({ params: task.params }), taskOwner) };
-          } catch (cause) {
-            throw new Error(
-              `${taskOwner} Matrix discovery failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-              { cause },
-            );
-          }
-        }),
-      ),
+      tasks: await Promise.all(coordinate.tasks.map((task) => discoverTask(task, coordinate.owner))),
     })),
   );
+}
+
+function bindTasks<M extends Matrix>(definition: WorkflowDefinition<M, JsonObject>, matrix: JsonObject, owner: string) {
+  try {
+    // SAFETY: Expansion preserves M's axes; omitting the Matrix infers an empty coordinate.
+    const bindings = definition.tasks({ matrix: matrix as CaseCoordinates<M> });
+    if (!Array.isArray(bindings) || bindings.length === 0) {
+      fail(owner, ".tasks", "expected a non-empty Task tuple");
+    }
+    const names = new Set<string>();
+    return bindings.map((binding) => prepareBinding(binding, owner, names));
+  } catch (cause) {
+    throw errorWithContext(`${owner} Task binding failed`, cause);
+  }
+}
+
+async function discoverTask(task: RuntimeTask, owner: string): Promise<PreparedTask> {
+  const taskOwner = `${owner} Task ${JSON.stringify(task.name)}`;
+  try {
+    const matrix = await task.matrix({ params: task.params });
+    return { task, cases: expandMatrix(matrix, taskOwner) };
+  } catch (cause) {
+    throw errorWithContext(`${taskOwner} Matrix discovery failed`, cause);
+  }
 }
 
 function prepareBinding(binding: AnyTaskBinding, owner: string, names: Set<string>): RuntimeTask {
@@ -172,7 +171,7 @@ function prepareBinding(binding: AnyTaskBinding, owner: string, names: Set<strin
   const taskOwner = `${owner} Task ${JSON.stringify(task.name)}`;
   for (const key of ["matrix", "run", "setup", "teardown"] as const) {
     if ((key === "setup" || key === "teardown") && task[key] === undefined) continue;
-    if (!z.function().safeParse(task[key]).success) fail(taskOwner, `.${key}`, "expected a function");
+    if (!functionSchema.safeParse(task[key]).success) fail(taskOwner, `.${key}`, "expected a function");
   }
   if (task.teardown && !task.setup) fail(taskOwner, ".teardown", "requires setup");
   const params = snapshotJson(task.params, taskOwner, ".params");

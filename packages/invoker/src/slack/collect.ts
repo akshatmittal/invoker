@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import type { JsonObject } from "../types.js";
 
+import { errorMessage } from "../errors.js";
+
 const jsonObjectSchema = z.record(z.string(), z.json());
 const workflowInfoSchema = z.object({ name: z.string(), metadata: jsonObjectSchema.optional() });
 const workflowMetaSchema = z.object({ invokerWorkflow: workflowInfoSchema });
@@ -17,8 +19,6 @@ const testMetaSchema = z.object({
     output: z.json().optional(),
   }),
 });
-const errorMessageSchema = z.object({ message: z.string() });
-const errorStackSchema = z.object({ stack: z.string() });
 
 type Failure = {
   readonly task?: string;
@@ -161,14 +161,6 @@ function collectTask(suite: TestSuite, coordinateName: string) {
 function addErrors(failures: Failure[], errors: readonly unknown[], task?: string): void {
   const messages = errors.map(errorMessage);
   if (messages.length > 0) failures.push({ task, messages });
-}
-
-export function errorMessage(cause: unknown): string {
-  const message = errorMessageSchema.safeParse(cause);
-  if (message.success) return message.data.message;
-  const stack = errorStackSchema.safeParse(cause);
-  if (stack.success) return stack.data.stack.split("\n", 1)[0]!;
-  return String(cause);
 }
 
 function deduplicateFailures(failures: Failure[]): Failure[] {
