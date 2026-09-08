@@ -1,5 +1,23 @@
 # @akshatmittal/invoker
 
+## 0.4.0
+
+### Minor Changes
+
+- [#8](https://github.com/akshatmittal/invoker/pull/8) [`599b4ad`](https://github.com/akshatmittal/invoker/commit/599b4ad8d13586e8c8f604a61f7c7e433dacf908) Thanks [@akshatmittal](https://github.com/akshatmittal)! - Add Workflow matrices and required, typed Task parameter bindings. Declare Tasks with `defineTask<Params>()({ ... })` and bind them from a Workflow's `tasks: ({ matrix }) => [...]` callback.
+
+  Each Workflow coordinate executes its own Task sequence and lifecycle. Schema 2 results persist separate Workflow and Task coordinates and all bound parameters. Slack groups coordinate-specific Task rows in one Workflow report and reports collection failures even without Cases.
+
+  This replaces the previous Task declaration, Workflow task list, and schema 1 result formats.
+
+### Patch Changes
+
+- [#8](https://github.com/akshatmittal/invoker/pull/8) [`599b4ad`](https://github.com/akshatmittal/invoker/commit/599b4ad8d13586e8c8f604a61f7c7e433dacf908) Thanks [@akshatmittal](https://github.com/akshatmittal)! - Make bound Task parameters and callback parameter views deeply readonly, rejecting mutations of nested objects and arrays at compile time.
+
+- [#8](https://github.com/akshatmittal/invoker/pull/8) [`599b4ad`](https://github.com/akshatmittal/invoker/commit/599b4ad8d13586e8c8f604a61f7c7e433dacf908) Thanks [@akshatmittal](https://github.com/akshatmittal)! - Simplify Workflow preparation and Task types, and share Slack detail rendering and error formatting across the SDK and reporter.
+
+  Collection errors now retain messages from structured thrown values as well as native Errors.
+
 ## 0.3.1
 
 ### Patch Changes
