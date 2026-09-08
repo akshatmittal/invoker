@@ -41,8 +41,13 @@ export interface TaskContext<Coordinates, Setup, Params = Record<never, never>> 
 
 export type Awaitable<Value> = Value | PromiseLike<Value>;
 
+// JsonValue is already deeply readonly; preserve it to avoid expanding its recursive definition.
+type DeepReadonly<Value> = JsonValue extends Value
+  ? Value
+  : { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> };
+
 export type ParamsContext<Params> = {
-  readonly params: Readonly<Params>;
+  readonly params: DeepReadonly<Params>;
 };
 
 export type SetupContext<M extends Matrix, Params = Record<never, never>> = ParamsContext<Params> & {

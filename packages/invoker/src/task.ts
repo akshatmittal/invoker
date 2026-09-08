@@ -34,14 +34,8 @@ type TaskOptions<Name extends string, M extends Matrix, Setup, Output extends Js
   readonly teardown?: (context: TeardownContext<M, Setup, Params>) => Awaitable<void>;
 };
 
-interface BoundTask<
-  Name extends string,
-  M extends Matrix,
-  Setup,
-  Output extends JsonValue,
-  Params extends JsonObject,
-> extends TaskOptions<Name, M, Setup, Output, Params> {
-  readonly params: Readonly<Params>;
+interface BoundTask<Name extends string, M extends Matrix, Setup, Output extends JsonValue, Params extends JsonObject>
+  extends TaskOptions<Name, M, Setup, Output, Params>, ParamsContext<Params> {
   readonly matrix: (context: ParamsContext<Params>) => Promise<M>;
   readonly [taskBindingBrand]: true;
 }
