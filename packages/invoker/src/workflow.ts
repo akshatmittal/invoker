@@ -116,17 +116,24 @@ async function prepareWorkflow<M extends Matrix>(definition: WorkflowDefinition<
   const matrix = definition.matrix ? await definition.matrix() : {};
   const coordinates = expandMatrix(matrix, owner).map((coordinate, index) => {
     const coordinateOwner = `${owner} coordinate ${caseName(coordinate, index)}`;
-    // SAFETY: Expansion preserves M's axes; omitting the Matrix infers an empty coordinate.
-    const bindings = definition.tasks({ matrix: coordinate as CaseCoordinates<M> });
-    if (!Array.isArray(bindings) || bindings.length === 0) {
-      fail(coordinateOwner, ".tasks", "expected a non-empty Task tuple");
+    try {
+      // SAFETY: Expansion preserves M's axes; omitting the Matrix infers an empty coordinate.
+      const bindings = definition.tasks({ matrix: coordinate as CaseCoordinates<M> });
+      if (!Array.isArray(bindings) || bindings.length === 0) {
+        fail(coordinateOwner, ".tasks", "expected a non-empty Task tuple");
+      }
+      const names = new Set<string>();
+      return {
+        matrix: coordinate,
+        owner: coordinateOwner,
+        tasks: bindings.map((binding) => prepareBinding(binding, coordinateOwner, names)),
+      };
+    } catch (cause) {
+      throw new Error(
+        `${coordinateOwner} Task binding failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+        { cause },
+      );
     }
-    const names = new Set<string>();
-    return {
-      matrix: coordinate,
-      owner: coordinateOwner,
-      tasks: bindings.map((binding) => prepareBinding(binding, coordinateOwner, names)),
-    };
   });
 
   return Promise.all(

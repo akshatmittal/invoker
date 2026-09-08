@@ -12,7 +12,11 @@ import type {
 
 export const taskBindingBrand: unique symbol = Symbol("invoker.task-binding");
 
-type ParameterArguments<Params> = keyof Params extends never ? [] : [params: Params];
+type ParameterArguments<Params> = [Params] extends [Record<string, never>] ? [] : [params: Params];
+
+type RequiredParameters<Params> = {
+  [Key in keyof Params]-?: Params[Key] extends JsonValue ? RequiredParameters<Params[Key]> : never;
+};
 
 export type TaskDefinition<
   Name extends string = string,
@@ -48,7 +52,9 @@ type TaskWithoutSetup<Name extends string, M extends Matrix, Output extends Json
   readonly teardown?: never;
 };
 
-export function defineTask<Params extends { [Key in keyof Params]-?: JsonValue } = Record<never, never>>() {
+export function defineTask<
+  Params extends Record<keyof Params, JsonValue> & RequiredParameters<Params> = Record<never, never>,
+>() {
   function define<
     const Name extends string,
     const M extends Matrix = Record<never, never>,
