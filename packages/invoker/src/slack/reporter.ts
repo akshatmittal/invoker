@@ -7,7 +7,7 @@ import { setTimeout } from "node:timers/promises";
 import { collectWorkflowReports } from "./collect.js";
 import { failureMessages, retryMessages, skipMessages, summaryMessage, unhandledErrorMessages } from "./report.js";
 
-const FAILURE_REPLY_LIMIT = 10;
+const THREAD_REPLY_LIMIT = 10;
 
 export type SlackReporterOptions = {
   readonly token: string;
@@ -53,16 +53,19 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
         return;
       }
 
-      const failureReplies = reports.flatMap(failureMessages);
-      const replies = [
-        ...failureReplies.slice(0, FAILURE_REPLY_LIMIT),
+      const details = [
+        ...reports.flatMap(failureMessages),
         ...reports.flatMap(retryMessages),
         ...reports.flatMap(skipMessages),
         ...unhandledErrorMessages(unhandledErrors),
-        ...(failureReplies.length > FAILURE_REPLY_LIMIT
-          ? [{ text: "Too many errors to display. See the run logs for more details." }]
-          : []),
       ];
+      const replies =
+        details.length > THREAD_REPLY_LIMIT
+          ? [
+              ...details.slice(0, THREAD_REPLY_LIMIT - 1),
+              { text: "Too many report details to display. See the run logs for more information." },
+            ]
+          : details;
       if (replies.length > 0 && !parentTimestamp) {
         console.warn("[invoker] Slack did not return a timestamp for the report thread.");
         return;
