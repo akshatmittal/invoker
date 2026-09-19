@@ -56,12 +56,12 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
       const failureReplies = reports.flatMap(failureMessages);
       const replies = [
         ...failureReplies.slice(0, FAILURE_REPLY_LIMIT),
-        ...(failureReplies.length > FAILURE_REPLY_LIMIT
-          ? [{ text: "Too many errors to display. See the run logs for more details." }]
-          : []),
         ...reports.flatMap(retryMessages),
         ...reports.flatMap(skipMessages),
         ...unhandledErrorMessages(unhandledErrors),
+        ...(failureReplies.length > FAILURE_REPLY_LIMIT
+          ? [{ text: "Too many errors to display. See the run logs for more details." }]
+          : []),
       ];
       if (replies.length > 0 && !parentTimestamp) {
         console.warn("[invoker] Slack did not return a timestamp for the report thread.");
