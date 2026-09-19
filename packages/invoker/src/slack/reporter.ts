@@ -7,6 +7,8 @@ import { setTimeout } from "node:timers/promises";
 import { collectWorkflowReports } from "./collect.js";
 import { failureMessages, retryMessages, skipMessages, summaryMessage, unhandledErrorMessages } from "./report.js";
 
+const FAILURE_REPLY_LIMIT = 10;
+
 export type SlackReporterOptions = {
   readonly token: string;
   readonly channel: string;
@@ -51,8 +53,12 @@ export function slackReporter(options: SlackReporterOptions): Reporter {
         return;
       }
 
+      const failureReplies = reports.flatMap(failureMessages);
       const replies = [
-        ...reports.flatMap(failureMessages),
+        ...failureReplies.slice(0, FAILURE_REPLY_LIMIT),
+        ...(failureReplies.length > FAILURE_REPLY_LIMIT
+          ? [{ text: "Too many errors to display. See the run logs for more details." }]
+          : []),
         ...reports.flatMap(retryMessages),
         ...reports.flatMap(skipMessages),
         ...unhandledErrorMessages(unhandledErrors),

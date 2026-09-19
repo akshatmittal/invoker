@@ -248,9 +248,11 @@ A shared footer
 contains the elapsed span from the first Case start to the final Case completion,
 a localized timestamp, and the optional run link. Final failures, successful
 retry details, skipped Case reasons, and unhandled run errors are posted in the
-same thread. Delivery failures are isolated to the affected reply. Ambiguous
-transport failures are not retried; an explicit Slack rate-limit rejection is
-reattempted only after its required delay.
+same thread. Failure details are limited to ten replies per run; when more are
+available, a final reply directs readers to the run logs. Delivery failures are
+isolated to the affected reply. Ambiguous transport failures are not retried; an
+explicit Slack rate-limit rejection is reattempted only after its required
+delay.
 
 ```ts
 import { slackReporter } from "@akshatmittal/invoker/slack";
