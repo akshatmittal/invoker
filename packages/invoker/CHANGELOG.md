@@ -1,5 +1,11 @@
 # @akshatmittal/invoker
 
+## 0.4.1
+
+### Patch Changes
+
+- [#10](https://github.com/akshatmittal/invoker/pull/10) [`f32ee85`](https://github.com/akshatmittal/invoker/commit/f32ee85488b95be7d58366bf685edef1102fd547) Thanks [@akshatmittal](https://github.com/akshatmittal)! - Limit Slack report threads to ten replies and direct readers to the run logs when more details are available.
+
 ## 0.4.0
 
 ### Minor Changes
